@@ -11,6 +11,7 @@ from app.rag.models import (
     RAGStreamError,
     RAGStreamSources,
 )
+from app.rag.prompt import RAGPromptBuilder
 from app.rag.service import RAGService, RAGServiceError
 from app.search.models import SearchResult
 from app.vectorstores.models import ScoredDocumentChunk
@@ -285,3 +286,36 @@ def test_stream_answer_emits_safe_error_without_complete_on_pipeline_or_provider
     assert isinstance(stream_events[-1], RAGStreamError)
     assert stream_events[-1].message == "RAG answer is unavailable."
     assert not any(isinstance(event, RAGStreamComplete) for event in stream_events)
+
+
+def test_stream_answer_forwards_the_citation_aware_prompt_and_source_mapping():
+    events: list[str] = []
+    search = FakeSearchService(events, [search_result()])
+    ingestion = FakeIngestionService(events, [document()])
+    chunker = FakeChunker(events, [chunk()])
+    retrieval = FakeRetrievalService(events, [scored_chunk()])
+    llm = FakeLLMProvider(events, "Generated answer [1].")
+    service = RAGService(
+        search,
+        ingestion,
+        chunker,
+        retrieval,
+        RAGPromptBuilder(),
+        llm,
+        retrieval_top_k=3,
+    )
+
+    async def collect():
+        return [event async for event in service.stream_answer("What happened?")]
+
+    stream_events = asyncio.run(collect())
+
+    assert "For factual claims, cite supporting sources with [1], [2], and so on." in llm.prompts[0]
+    sources_event = next(event for event in stream_events if isinstance(event, RAGStreamSources))
+    assert sources_event.sources == [
+        CitationSource(
+            citation_number=1,
+            url="https://example.com/source",
+            title="Document title",
+        )
+    ]
