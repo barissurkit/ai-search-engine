@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +19,12 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
     openai_generation_model: str = "gpt-5.6-terra"
+    llm_provider: Literal["ollama", "openai"] = "ollama"
+    embedding_provider: Literal["ollama", "openai"] = "ollama"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_generation_model: str = "qwen3:4b-instruct"
+    ollama_embedding_model: str = "embeddinggemma"
+    ollama_embedding_dimensions: int = 768
     rag_retrieval_top_k: int = 5
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "ai_search_chunks"

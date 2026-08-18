@@ -4,9 +4,11 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, HTTPException, status
 
+from app.api.dependencies.providers import (
+    create_embedding_provider,
+    create_llm_provider,
+)
 from app.core.config import Settings, get_settings
-from app.embeddings.openai import OpenAIEmbeddingProvider
-from app.llm.openai import OpenAILLMProvider
 from app.rag.chunking import DocumentChunker
 from app.rag.prompt import RAGPromptBuilder
 from app.rag.service import RAGService
@@ -23,10 +25,10 @@ async def get_rag_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AsyncIterator[RAGService]:
     try:
-        embedding_provider = OpenAIEmbeddingProvider(settings)
-        vector_store = QdrantVectorStore(settings, embedding_provider.dimensions)
-        llm_provider = OpenAILLMProvider(settings)
         async with httpx.AsyncClient() as client:
+            embedding_provider = create_embedding_provider(settings, client)
+            vector_store = QdrantVectorStore(settings, embedding_provider.dimensions)
+            llm_provider = create_llm_provider(settings, client)
             yield RAGService(
                 search_service=SearchService(TavilySearchProvider(settings, client)),
                 ingestion_service=WebIngestionService(
