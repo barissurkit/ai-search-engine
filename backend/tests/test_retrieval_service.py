@@ -140,7 +140,7 @@ def test_retrieve_embeds_query_searches_and_preserves_scored_result():
 
     assert embedding_provider.embed_calls == ["user query"]
     assert vector_store.initialize_calls == 1
-    assert vector_store.search_calls == [([0.4, 0.5, 0.6], 7, "scope-one")]
+    assert vector_store.search_calls == [([0.4, 0.5, 0.6], 21, "scope-one")]
     assert results == [result]
 
 
@@ -153,8 +153,8 @@ def test_retrieve_uses_default_top_k_and_initializes_once():
     asyncio.run(service.retrieve("second query", "scope-two"))
 
     assert vector_store.search_calls == [
-        ([0.1, 0.2, 0.3], 6, "scope-one"),
-        ([0.1, 0.2, 0.3], 6, "scope-two"),
+        ([0.1, 0.2, 0.3], 18, "scope-one"),
+        ([0.1, 0.2, 0.3], 18, "scope-two"),
     ]
     assert vector_store.initialize_calls == 1
 
@@ -203,3 +203,80 @@ def test_provider_and_store_errors_become_safe_service_errors():
 def test_constructor_rejects_dimension_mismatch():
     with pytest.raises(RetrievalServiceError, match="dimensions must match"):
         RetrievalService(FakeEmbeddingProvider(dimensions=3), FakeVectorStore(dimensions=4))
+
+
+def test_retrieve_diversifies_candidate_pool_without_leaking_candidate_limit():
+    source_a = DocumentChunk(
+        content="A first",
+        source_url="https://example.test/a",
+        final_url="https://example.test/a",
+        index=0,
+    )
+    source_a_second = source_a.model_copy(update={"content": "A second", "index": 1})
+    source_b = source_a.model_copy(
+        update={
+            "content": "B first",
+            "source_url": "https://example.test/b",
+            "final_url": "https://example.test/b",
+        }
+    )
+    source_c = source_a.model_copy(
+        update={
+            "content": "C first",
+            "source_url": "https://example.test/c",
+            "final_url": "https://example.test/c",
+        }
+    )
+    candidates = [
+        ScoredDocumentChunk(chunk=source_a, score=0.9),
+        ScoredDocumentChunk(chunk=source_a_second, score=0.8),
+        ScoredDocumentChunk(chunk=source_b, score=0.7),
+        ScoredDocumentChunk(chunk=source_c, score=0.6),
+    ]
+    vector_store = FakeVectorStore(search_results=candidates)
+    service = RetrievalService(
+        FakeEmbeddingProvider(),
+        vector_store,
+        candidate_multiplier=3,
+        max_chunks_per_source=1,
+    )
+
+    results = asyncio.run(service.retrieve("query", "request-scope", top_k=3))
+
+    assert vector_store.search_calls == [([0.1, 0.2, 0.3], 9, "request-scope")]
+    assert results == [candidates[0], candidates[2], candidates[3]]
+    assert [result.score for result in results] == [0.9, 0.7, 0.6]
+
+
+def test_retrieve_returns_short_list_when_candidate_pool_has_too_few_sources():
+    source = chunks()[0]
+    candidates = [
+        ScoredDocumentChunk(chunk=source, score=0.9),
+        ScoredDocumentChunk(chunk=source.model_copy(update={"index": 1}), score=0.8),
+    ]
+    service = RetrievalService(
+        FakeEmbeddingProvider(),
+        FakeVectorStore(search_results=candidates),
+        candidate_multiplier=3,
+        max_chunks_per_source=1,
+    )
+
+    results = asyncio.run(service.retrieve("query", "scope-one", top_k=3))
+
+    assert results == [candidates[0]]
+
+
+@pytest.mark.parametrize(
+    ("candidate_multiplier", "max_chunks_per_source"),
+    [(0, 1), (-1, 1), (True, 1), (1, 0), (1, -1), (1, True)],
+)
+def test_constructor_rejects_invalid_diversification_configuration(
+    candidate_multiplier: int, max_chunks_per_source: int
+):
+    with pytest.raises(RetrievalServiceError, match="at least 1"):
+        RetrievalService(
+            FakeEmbeddingProvider(),
+            FakeVectorStore(),
+            candidate_multiplier=candidate_multiplier,
+            max_chunks_per_source=max_chunks_per_source,
+        )

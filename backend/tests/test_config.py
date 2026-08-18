@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 
@@ -21,6 +24,8 @@ def test_settings_defaults(monkeypatch):
         "OLLAMA_EMBEDDING_DIMENSIONS",
         "OLLAMA_REQUEST_TIMEOUT_SECONDS",
         "RAG_RETRIEVAL_TOP_K",
+        "RETRIEVAL_CANDIDATE_MULTIPLIER",
+        "RETRIEVAL_MAX_CHUNKS_PER_SOURCE",
         "QDRANT_URL",
         "QDRANT_COLLECTION_NAME",
         "WEB_FETCH_TIMEOUT_SECONDS",
@@ -49,6 +54,8 @@ def test_settings_defaults(monkeypatch):
     assert settings.ollama_embedding_dimensions == 768
     assert settings.ollama_request_timeout_seconds == 120.0
     assert settings.rag_retrieval_top_k == 5
+    assert settings.retrieval_candidate_multiplier == 3
+    assert settings.retrieval_max_chunks_per_source == 1
     assert settings.qdrant_url == "http://localhost:6333"
     assert settings.qdrant_collection_name == "ai_search_chunks"
     assert settings.web_fetch_timeout_seconds == 10.0
@@ -72,6 +79,8 @@ def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("OLLAMA_EMBEDDING_DIMENSIONS", "12")
     monkeypatch.setenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "30")
     monkeypatch.setenv("RAG_RETRIEVAL_TOP_K", "7")
+    monkeypatch.setenv("RETRIEVAL_CANDIDATE_MULTIPLIER", "4")
+    monkeypatch.setenv("RETRIEVAL_MAX_CHUNKS_PER_SOURCE", "2")
     monkeypatch.setenv("QDRANT_URL", "http://qdrant.test:6333")
     monkeypatch.setenv("QDRANT_COLLECTION_NAME", "test_chunks")
     monkeypatch.setenv("WEB_FETCH_TIMEOUT_SECONDS", "5.5")
@@ -97,6 +106,8 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.ollama_embedding_dimensions == 12
     assert settings.ollama_request_timeout_seconds == 30.0
     assert settings.rag_retrieval_top_k == 7
+    assert settings.retrieval_candidate_multiplier == 4
+    assert settings.retrieval_max_chunks_per_source == 2
     assert settings.qdrant_url == "http://qdrant.test:6333"
     assert settings.qdrant_collection_name == "test_chunks"
     assert settings.web_fetch_timeout_seconds == 5.5
@@ -104,3 +115,17 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.web_ingestion_max_concurrency == 2
     assert "tvly-test-secret" not in repr(settings)
     assert "openai-test-secret" not in repr(settings)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("retrieval_candidate_multiplier", 0),
+        ("retrieval_candidate_multiplier", -1),
+        ("retrieval_max_chunks_per_source", 0),
+        ("retrieval_max_chunks_per_source", -1),
+    ],
+)
+def test_retrieval_diversification_settings_require_positive_values(field: str, value: int):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field: value})

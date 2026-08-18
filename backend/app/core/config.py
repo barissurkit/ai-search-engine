@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     ollama_embedding_dimensions: int = 768
     ollama_request_timeout_seconds: float = 120.0
     rag_retrieval_top_k: int = 5
+    retrieval_candidate_multiplier: int = Field(default=3, ge=1)
+    retrieval_max_chunks_per_source: int = Field(default=1, ge=1)
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "ai_search_chunks"
     web_fetch_timeout_seconds: float = 10.0
