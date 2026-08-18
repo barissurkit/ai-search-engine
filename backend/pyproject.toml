@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.141.1",
     "httpx>=0.28.1",
+    "openai>=3.2.0",
     "pydantic-settings>=2.15.0",
     "trafilatura>=2.2.0",
 ]
