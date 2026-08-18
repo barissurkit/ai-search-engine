@@ -1,6 +1,19 @@
-from app.llm.provider import LLMProvider
+import asyncio
+from collections.abc import AsyncIterator
+from typing import Literal
+
+from app.llm.provider import LLMProvider, StreamingLLMProvider
 from app.rag.chunking import DocumentChunker
-from app.rag.models import RAGAnswer
+from app.rag.models import (
+    RAGAnswer,
+    RAGPrompt,
+    RAGStreamComplete,
+    RAGStreamDelta,
+    RAGStreamError,
+    RAGStreamEvent,
+    RAGStreamProgress,
+    RAGStreamSources,
+)
 from app.rag.prompt import RAGPromptBuilder
 from app.retrieval.service import RetrievalService
 from app.search.service import SearchService
@@ -34,16 +47,7 @@ class RAGService:
         self._retrieval_top_k = retrieval_top_k
 
     async def answer(self, query: str) -> RAGAnswer:
-        if not isinstance(query, str) or not query.strip():
-            raise RAGServiceError("RAG query must not be empty.")
-
-        search_results = await self._search(query)
-        documents = await self._ingest(search_results)
-        chunks = self._chunk_documents(documents)
-        scope_id = str(uuid4())
-        await self._index(chunks, scope_id)
-        retrieved_chunks = await self._retrieve(query, scope_id)
-        prompt = self._build_prompt(query, retrieved_chunks)
+        prompt = await self._prepare_prompt(query)
         generated_answer = await self._generate(prompt.prompt)
 
         return RAGAnswer(
@@ -51,6 +55,56 @@ class RAGService:
             answer=generated_answer,
             sources=prompt.sources,
         )
+
+    @property
+    def supports_streaming(self) -> bool:
+        return isinstance(self._llm_provider, StreamingLLMProvider)
+
+    async def stream_answer(self, query: str) -> AsyncIterator[RAGStreamEvent]:
+        """Run the normal RAG pipeline while exposing provider-independent events."""
+        try:
+            async for stage, prompt in self._prepare_prompt_stages(query):
+                yield RAGStreamProgress(stage=stage)
+
+            assert prompt is not None
+            if not self.supports_streaming:
+                raise RAGServiceError("Streaming answer generation is unavailable.")
+            async for text in self._llm_provider.stream(prompt.prompt):
+                if text:
+                    yield RAGStreamDelta(text=text)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - provider implementations are intentionally opaque
+            yield RAGStreamError(message="RAG answer is unavailable.")
+            return
+
+        yield RAGStreamSources(sources=prompt.sources)
+        yield RAGStreamComplete()
+
+    async def _prepare_prompt(self, query: str) -> RAGPrompt:
+        prompt: RAGPrompt | None = None
+        async for _, prompt in self._prepare_prompt_stages(query):
+            pass
+        assert prompt is not None
+        return prompt
+
+    async def _prepare_prompt_stages(
+        self, query: str
+    ) -> AsyncIterator[tuple[Literal["searching", "ingesting", "retrieving", "generating"], RAGPrompt | None]]:
+        if not isinstance(query, str) or not query.strip():
+            raise RAGServiceError("RAG query must not be empty.")
+
+        yield "searching", None
+        search_results = await self._search(query)
+        yield "ingesting", None
+        documents = await self._ingest(search_results)
+        chunks = self._chunk_documents(documents)
+        yield "retrieving", None
+        scope_id = str(uuid4())
+        await self._index(chunks, scope_id)
+        retrieved_chunks = await self._retrieve(query, scope_id)
+        prompt = self._build_prompt(query, retrieved_chunks)
+        yield "generating", prompt
 
     async def _search(self, query: str):
         try:

@@ -2,7 +2,16 @@ import asyncio
 
 import pytest
 
-from app.rag.models import CitationSource, DocumentChunk, RAGPrompt
+from app.rag.models import (
+    CitationSource,
+    DocumentChunk,
+    RAGPrompt,
+    RAGStreamComplete,
+    RAGStreamDelta,
+    RAGStreamError,
+    RAGStreamSources,
+)
+from app.rag.prompt import RAGPromptBuilder
 from app.rag.service import RAGService, RAGServiceError
 from app.search.models import SearchResult
 from app.vectorstores.models import ScoredDocumentChunk
@@ -135,6 +144,14 @@ class FakeLLMProvider:
             raise self.answer
         return self.answer
 
+    async def stream(self, prompt: str):
+        self.events.append("stream")
+        self.prompts.append(prompt)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        yield "Generated "
+        yield "answer [1]."
+
 
 def create_service(
     *,
@@ -225,3 +242,80 @@ def test_answer_converts_retrieval_index_failure_to_a_safe_error():
         asyncio.run(service.answer("Question"))
 
     assert "vector secret" not in str(exc_info.value)
+
+
+def test_stream_answer_emits_ordered_progress_deltas_sources_and_complete():
+    service, events, search, _, _, retrieval, prompt_builder, llm = create_service()
+
+    async def collect():
+        return [event async for event in service.stream_answer("What happened?")]
+
+    stream_events = asyncio.run(collect())
+
+    assert [(event.type, getattr(event, "stage", None)) for event in stream_events] == [
+        ("progress", "searching"),
+        ("progress", "ingesting"),
+        ("progress", "retrieving"),
+        ("progress", "generating"),
+        ("delta", None),
+        ("delta", None),
+        ("sources", None),
+        ("complete", None),
+    ]
+    assert [event.text for event in stream_events if isinstance(event, RAGStreamDelta)] == [
+        "Generated ",
+        "answer [1].",
+    ]
+    assert isinstance(stream_events[-2], RAGStreamSources)
+    assert stream_events[-2].sources == prompt_builder.prompt.sources
+    assert isinstance(stream_events[-1], RAGStreamComplete)
+    assert events == ["search", "ingest", "chunk", "index", "retrieve", "prompt", "stream"]
+    assert search.queries == ["What happened?"]
+    assert retrieval.retrieve_calls[0][0] == "What happened?"
+    assert llm.prompts == ["Grounded prompt"]
+
+
+def test_stream_answer_emits_safe_error_without_complete_on_pipeline_or_provider_failure():
+    service, _, *_ = create_service(generated_answer=RuntimeError("provider secret"))
+
+    async def collect():
+        return [event async for event in service.stream_answer("Question")]
+
+    stream_events = asyncio.run(collect())
+
+    assert isinstance(stream_events[-1], RAGStreamError)
+    assert stream_events[-1].message == "RAG answer is unavailable."
+    assert not any(isinstance(event, RAGStreamComplete) for event in stream_events)
+
+
+def test_stream_answer_forwards_the_citation_aware_prompt_and_source_mapping():
+    events: list[str] = []
+    search = FakeSearchService(events, [search_result()])
+    ingestion = FakeIngestionService(events, [document()])
+    chunker = FakeChunker(events, [chunk()])
+    retrieval = FakeRetrievalService(events, [scored_chunk()])
+    llm = FakeLLMProvider(events, "Generated answer [1].")
+    service = RAGService(
+        search,
+        ingestion,
+        chunker,
+        retrieval,
+        RAGPromptBuilder(),
+        llm,
+        retrieval_top_k=3,
+    )
+
+    async def collect():
+        return [event async for event in service.stream_answer("What happened?")]
+
+    stream_events = asyncio.run(collect())
+
+    assert "For factual claims, cite supporting sources with [1], [2], and so on." in llm.prompts[0]
+    sources_event = next(event for event in stream_events if isinstance(event, RAGStreamSources))
+    assert sources_event.sources == [
+        CitationSource(
+            citation_number=1,
+            url="https://example.com/source",
+            title="Document title",
+        )
+    ]

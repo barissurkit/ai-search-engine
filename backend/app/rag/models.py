@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
@@ -34,3 +34,32 @@ class RAGPrompt(BaseModel):
 
     prompt: str
     sources: list[CitationSource]
+
+
+class RAGStreamProgress(BaseModel):
+    type: Literal["progress"] = "progress"
+    stage: Literal["searching", "ingesting", "retrieving", "generating"]
+
+
+class RAGStreamDelta(BaseModel):
+    type: Literal["delta"] = "delta"
+    text: str
+
+
+class RAGStreamSources(BaseModel):
+    type: Literal["sources"] = "sources"
+    sources: list[CitationSource]
+
+
+class RAGStreamComplete(BaseModel):
+    type: Literal["complete"] = "complete"
+
+
+class RAGStreamError(BaseModel):
+    type: Literal["error"] = "error"
+    message: str
+
+
+type RAGStreamEvent = (
+    RAGStreamProgress | RAGStreamDelta | RAGStreamSources | RAGStreamComplete | RAGStreamError
+)
