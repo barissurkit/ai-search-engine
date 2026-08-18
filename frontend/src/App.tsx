@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { AppHeader } from './components/AppHeader'
+import { ResearchView } from './components/ResearchView'
 import { SearchComposer } from './components/SearchComposer'
 import { SuggestionChip } from './components/SuggestionChip'
+import { useResearch } from './features/research/useResearch'
 import './app/app.css'
 
 const suggestions = [
@@ -13,16 +15,27 @@ const suggestions = [
 
 function App() {
   const [query, setQuery] = useState('')
+  const { state, start, stop, reset } = useResearch()
+
+  const beginResearch = (submittedQuery: string) => {
+    setQuery(submittedQuery)
+    start(submittedQuery)
+  }
+
+  const returnToLanding = () => {
+    reset()
+    setQuery('')
+  }
 
   return (
     <div className="app-shell">
       <AppHeader />
-      <main className="landing-page">
+      {state.status !== 'idle' ? <ResearchView state={state} onStop={stop} onNewSearch={returnToLanding} /> : <main className="landing-page">
         <section className="hero" aria-labelledby="welcome-title">
           <p className="eyebrow">AI-powered research</p>
           <h1 id="welcome-title">What do you want to understand?</h1>
           <p className="intro">Search the web and get answers grounded in real sources.</p>
-          <SearchComposer query={query} onQueryChange={setQuery} onSubmit={() => undefined} />
+          <SearchComposer query={query} onQueryChange={setQuery} onSubmit={beginResearch} />
           <div className="suggestions" aria-label="Example searches">
             <p className="suggestions-label">Try asking</p>
             <div className="suggestion-list">
@@ -33,7 +46,7 @@ function App() {
           </div>
         </section>
         <footer className="landing-footer">AI Search helps you start with a better question.</footer>
-      </main>
+      </main>}
     </div>
   )
 }

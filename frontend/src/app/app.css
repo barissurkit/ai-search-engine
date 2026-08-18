@@ -22,3 +22,19 @@ h1 { color: var(--foreground); font-size: clamp(2.5rem, 5.2vw, 4.25rem); letter-
 .suggestion-chip:hover { background: var(--surface); border-color: var(--border-strong); color: var(--foreground); }
 .landing-footer { color: var(--muted); font-size: 0.78rem; padding-top: 3rem; text-align: center; }
 @media (max-width: 640px) { .landing-page { min-height: calc(100vh - 4rem); padding-top: 3rem; } .app-header { height: 4rem; } .search-composer { border-radius: 1.15rem; gap: 0.35rem; padding: 0.5rem; } .search-composer textarea { padding-left: 0.5rem; } .suggestion-list { align-items: stretch; flex-direction: column; } .suggestion-chip { text-align: left; } }
+.research-page { margin: 0 auto; max-width: 56rem; min-height: calc(100vh - 4.5rem); padding: 3.25rem var(--page-gutter) 5rem; }
+.research-content { margin: 0 auto; max-width: 46rem; }
+.new-search { background: transparent; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 0.88rem; padding: 0; }
+.submitted-query { color: var(--foreground); font-size: clamp(1.45rem, 3vw, 2.15rem); font-weight: 650; letter-spacing: -0.035em; line-height: 1.2; margin: 1.1rem 0 1.5rem; overflow-wrap: anywhere; }
+.research-status { align-items: center; color: var(--muted); display: flex; font-size: 0.92rem; gap: 0.55rem; min-height: 2rem; }
+.status-dot { background: var(--accent); border-radius: 50%; display: inline-block; height: 0.5rem; width: 0.5rem; }
+.stop-button { background: transparent; border: 1px solid var(--border-strong); border-radius: 0.5rem; color: var(--foreground); cursor: pointer; font: inherit; font-size: 0.8rem; margin-left: auto; padding: 0.3rem 0.6rem; }
+.answer-content { color: var(--foreground); font-size: 1.05rem; line-height: 1.75; margin-top: 2rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.research-note { color: var(--muted); font-size: 0.92rem; margin: 1rem 0; }
+.research-error { background: #fff4f3; border: 1px solid #efc7c1; border-radius: 0.75rem; color: #8d3025; margin: 1.25rem 0; padding: 0.8rem 1rem; }
+.sources-preview { border-top: 1px solid var(--border); margin-top: 2.5rem; padding-top: 1.5rem; }
+.sources-preview h2 { font-size: 0.92rem; letter-spacing: -0.01em; margin: 0 0 0.85rem; }
+.sources-preview ol { display: grid; gap: 0.65rem; list-style: none; margin: 0; padding: 0; }
+.sources-preview li { align-items: baseline; color: var(--muted); display: flex; font-size: 0.9rem; gap: 0.45rem; min-width: 0; }
+.sources-preview a { color: var(--foreground); overflow-wrap: anywhere; text-decoration-color: var(--border-strong); text-underline-offset: 0.18em; }
+@media (max-width: 640px) { .research-page { min-height: calc(100vh - 4rem); padding-top: 2rem; } .research-status { align-items: flex-start; flex-wrap: wrap; } .stop-button { margin-left: 0.25rem; } }
