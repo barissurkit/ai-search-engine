@@ -70,10 +70,11 @@ describe('AnswerContent', () => {
 
 describe('SourcesSection', () => {
   it('renders accessible source cards and hostnames', () => {
-    render(<SourcesSection sources={sources} />)
+    const { container } = render(<SourcesSection sources={sources} />)
     expect(screen.getByRole('heading', { name: /Sources · 2/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'First source' })).toHaveAttribute('href', 'https://one.example.com/article')
     expect(screen.getByText('one.example.com')).toBeInTheDocument()
+    expect(Array.from(container.querySelectorAll('.source-card a')).map((link) => link.textContent)).toEqual(['First source', 'Second source'])
   })
 
   it('does not render a source section when sources are absent', () => {

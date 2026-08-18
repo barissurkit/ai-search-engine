@@ -5,11 +5,12 @@ interface SearchComposerProps {
   onQueryChange: (query: string) => void
   onSubmit: (query: string) => void
   disabled?: boolean
+  autoFocus?: boolean
 }
 
 const maxTextareaHeight = 176
 
-export function SearchComposer({ query, onQueryChange, onSubmit, disabled = false }: SearchComposerProps) {
+export function SearchComposer({ query, onQueryChange, onSubmit, disabled = false, autoFocus = false }: SearchComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
         placeholder="Search and ask anything"
         rows={1}
         disabled={disabled}
+        autoFocus={autoFocus}
       />
       <button type="submit" aria-label="Submit search" disabled={disabled || !query.trim()}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>

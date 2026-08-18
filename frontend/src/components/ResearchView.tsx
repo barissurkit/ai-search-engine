@@ -27,7 +27,9 @@ export function ResearchView({ state, onStop, onNewSearch }: ResearchViewProps) 
         )}
         {state.wasCancelled && <p className="research-note" role="status">Research stopped. Your partial answer is preserved.</p>}
         {state.error && <p className="research-error" role="alert">{state.error}</p>}
+        {state.status === 'running' && state.progressStage === 'generating' && !state.answer && <p className="answer-pending">Preparing your answer…</p>}
         <AnswerContent answer={state.answer} sources={state.sources} />
+        {state.status === 'completed' && !state.wasCancelled && !state.answer && <p className="empty-answer" role="status">No answer was generated.</p>}
         <SourcesSection sources={state.sources} />
       </div>
     </main>

@@ -85,6 +85,37 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
   })
 
+  it('shows generating feedback before the first answer delta', () => {
+    streamAnswerMock.mockResolvedValue(undefined)
+    render(<App />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Generating' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
+    emit({ type: 'progress', stage: 'generating' })
+    expect(screen.getByText('Preparing your answer…')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Answer')).not.toBeInTheDocument()
+  })
+
+  it('keeps a partial answer visible alongside an error', () => {
+    streamAnswerMock.mockResolvedValue(undefined)
+    render(<App />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Partial' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
+    emit({ type: 'delta', text: 'Partial answer' })
+    emit({ type: 'error', message: 'The answer service is unavailable.' })
+    expect(screen.getByLabelText('Answer')).toHaveTextContent('Partial answer')
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('shows a defensive fallback when a stream completes without an answer', () => {
+    streamAnswerMock.mockResolvedValue(undefined)
+    render(<App />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Empty' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
+    emit({ type: 'complete' })
+    expect(screen.getByText('No answer was generated.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy answer' })).not.toBeInTheDocument()
+  })
+
   it('stops the active request without displaying a generic error', () => {
     streamAnswerMock.mockImplementation((_query: string, { signal }: Omit<StreamCall, 'query'>) => new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))))
     render(<App />)
@@ -104,6 +135,17 @@ describe('App', () => {
     fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
     fireEvent.click(screen.getByRole('button', { name: 'New search' }))
     expect(screen.getByRole('heading', { name: 'What do you want to understand?' })).toBeInTheDocument()
+  })
+
+  it('aborts an active request when returning to a new search', () => {
+    streamAnswerMock.mockImplementation((_query: string, { signal }: Omit<StreamCall, 'query'>) => new Promise(() => signal))
+    render(<App />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Abort me' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
+    const { signal } = latestCall()
+    fireEvent.click(screen.getByRole('button', { name: 'New search' }))
+    expect(signal?.aborted).toBe(true)
+    expect(screen.getByRole('textbox', { name: 'Search the web' })).toHaveValue('')
   })
 
   it('ignores late events from a cancelled or reset request', () => {

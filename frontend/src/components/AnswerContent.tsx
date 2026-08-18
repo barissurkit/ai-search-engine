@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { CitationSource } from '../types/api'
@@ -41,6 +41,11 @@ export function AnswerContent({ answer, sources }: AnswerContentProps) {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1800)
+    return () => window.clearTimeout(timer)
+  }, [copied])
   const copy = async () => {
     try { await navigator.clipboard?.writeText(text); setCopied(true) } catch { return }
   }

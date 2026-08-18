@@ -35,7 +35,7 @@ function App() {
           <p className="eyebrow">AI-powered research</p>
           <h1 id="welcome-title">What do you want to understand?</h1>
           <p className="intro">Search the web and get answers grounded in real sources.</p>
-          <SearchComposer query={query} onQueryChange={setQuery} onSubmit={beginResearch} />
+          <SearchComposer query={query} onQueryChange={setQuery} onSubmit={beginResearch} autoFocus />
           <div className="suggestions" aria-label="Example searches">
             <p className="suggestions-label">Try asking</p>
             <div className="suggestion-list">
