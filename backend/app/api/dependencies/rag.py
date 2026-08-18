@@ -44,7 +44,12 @@ async def get_rag_service(
                     max_concurrency=settings.web_ingestion_max_concurrency,
                 ),
                 chunker=DocumentChunker(),
-                retrieval_service=RetrievalService(embedding_provider, vector_store),
+                retrieval_service=RetrievalService(
+                    embedding_provider,
+                    vector_store,
+                    candidate_multiplier=settings.retrieval_candidate_multiplier,
+                    max_chunks_per_source=settings.retrieval_max_chunks_per_source,
+                ),
                 prompt_builder=RAGPromptBuilder(),
                 llm_provider=llm_provider,
                 retrieval_top_k=settings.rag_retrieval_top_k,

@@ -1,5 +1,6 @@
 from app.embeddings.provider import EmbeddingProvider
 from app.rag.models import DocumentChunk
+from app.retrieval.diversification import SourceDiversifier
 from app.vectorstores.models import ScoredDocumentChunk
 from app.vectorstores.provider import VectorStore
 
@@ -14,6 +15,8 @@ class RetrievalService:
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
         default_top_k: int = 5,
+        candidate_multiplier: int = 3,
+        max_chunks_per_source: int = 1,
     ) -> None:
         if embedding_provider.dimensions != vector_store.dimensions:
             raise RetrievalServiceError(
@@ -21,10 +24,24 @@ class RetrievalService:
             )
         if default_top_k < 1:
             raise RetrievalServiceError("Default top_k must be at least 1.")
+        if (
+            isinstance(candidate_multiplier, bool)
+            or not isinstance(candidate_multiplier, int)
+            or candidate_multiplier < 1
+        ):
+            raise RetrievalServiceError("Candidate multiplier must be at least 1.")
+        if (
+            isinstance(max_chunks_per_source, bool)
+            or not isinstance(max_chunks_per_source, int)
+            or max_chunks_per_source < 1
+        ):
+            raise RetrievalServiceError("Max chunks per source must be at least 1.")
 
         self._embedding_provider = embedding_provider
         self._vector_store = vector_store
         self._default_top_k = default_top_k
+        self._candidate_multiplier = candidate_multiplier
+        self._source_diversifier = SourceDiversifier(max_chunks_per_source)
         self._collection_initialized = False
 
     async def index(self, chunks: list[DocumentChunk], scope_id: str) -> None:
@@ -74,9 +91,14 @@ class RetrievalService:
         self._validate_vector(query_vector)
         await self._ensure_collection()
         try:
-            return await self._vector_store.search(query_vector, limit, scope_id)
+            candidates = await self._vector_store.search(
+                query_vector,
+                limit * self._candidate_multiplier,
+                scope_id,
+            )
         except Exception as exc:
             raise RetrievalServiceError("Semantic retrieval search failed.") from exc
+        return self._source_diversifier.diversify(candidates, top_k=limit)
 
     async def _ensure_collection(self) -> None:
         if self._collection_initialized:
