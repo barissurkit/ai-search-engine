@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     tavily_base_url: str = "https://api.tavily.com"
     web_fetch_timeout_seconds: float = 10.0
     web_fetch_user_agent: str = "AI-Search-Engine/0.1"
+    web_ingestion_max_concurrency: int = 3
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
