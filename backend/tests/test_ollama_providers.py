@@ -50,12 +50,12 @@ def test_ollama_embedding_batches_inputs_once_and_preserves_order():
 
     assert provider.dimensions == 768
     assert vectors == [[1.0] * 768, [2.0] * 768]
-    assert client.calls == [
-        (
-            "http://localhost:11434/api/embed",
-            {"json": {"model": "embeddinggemma", "input": ["first", "second"]}},
-        )
-    ]
+    assert client.calls[0][0] == "http://localhost:11434/api/embed"
+    assert client.calls[0][1]["json"] == {
+        "model": "embeddinggemma",
+        "input": ["first", "second"],
+    }
+    assert client.calls[0][1]["timeout"].read == 120.0
 
 
 @pytest.mark.parametrize("payload", [{}, {"embeddings": [[1.0] * 767]}, {"embeddings": []}])
@@ -81,12 +81,13 @@ def test_ollama_generation_sends_model_prompt_and_normalizes_text():
     provider = OllamaLLMProvider(ollama_settings(), client)  # type: ignore[arg-type]
 
     assert asyncio.run(provider.generate("Prompt")) == "Local answer."
-    assert client.calls == [
-        (
-            "http://localhost:11434/api/generate",
-            {"json": {"model": "qwen3:4b-instruct", "prompt": "Prompt", "stream": False}},
-        )
-    ]
+    assert client.calls[0][0] == "http://localhost:11434/api/generate"
+    assert client.calls[0][1]["json"] == {
+        "model": "qwen3:4b-instruct",
+        "prompt": "Prompt",
+        "stream": False,
+    }
+    assert client.calls[0][1]["timeout"].read == 120.0
 
 
 @pytest.mark.parametrize("payload", [{}, {"response": " "}])

@@ -20,6 +20,7 @@ class OllamaEmbeddingProvider:
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._model = settings.ollama_embedding_model
         self._dimensions = settings.ollama_embedding_dimensions
+        self._timeout = httpx.Timeout(settings.ollama_request_timeout_seconds)
         self._client = client
 
     @property
@@ -39,6 +40,7 @@ class OllamaEmbeddingProvider:
             response = await self._client.post(
                 f"{self._base_url}/api/embed",
                 json={"model": self._model, "input": texts},
+                timeout=self._timeout,
             )
             response.raise_for_status()
             payload = response.json()

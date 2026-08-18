@@ -21,18 +21,25 @@ from app.web.fetcher import WebFetcher
 from app.web.ingestion import WebIngestionService
 
 
+def create_ollama_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(trust_env=False)
+
+
 async def get_rag_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AsyncIterator[RAGService]:
     try:
-        async with httpx.AsyncClient() as client:
-            embedding_provider = create_embedding_provider(settings, client)
+        async with (
+            httpx.AsyncClient() as web_client,
+            create_ollama_client() as ollama_client,
+        ):
+            embedding_provider = create_embedding_provider(settings, ollama_client)
             vector_store = QdrantVectorStore(settings, embedding_provider.dimensions)
-            llm_provider = create_llm_provider(settings, client)
+            llm_provider = create_llm_provider(settings, ollama_client)
             yield RAGService(
-                search_service=SearchService(TavilySearchProvider(settings, client)),
+                search_service=SearchService(TavilySearchProvider(settings, web_client)),
                 ingestion_service=WebIngestionService(
-                    fetcher=WebFetcher(settings, client),
+                    fetcher=WebFetcher(settings, web_client),
                     extractor=ContentExtractor(),
                     max_concurrency=settings.web_ingestion_max_concurrency,
                 ),

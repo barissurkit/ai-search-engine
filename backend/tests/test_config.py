@@ -19,6 +19,7 @@ def test_settings_defaults(monkeypatch):
         "OLLAMA_GENERATION_MODEL",
         "OLLAMA_EMBEDDING_MODEL",
         "OLLAMA_EMBEDDING_DIMENSIONS",
+        "OLLAMA_REQUEST_TIMEOUT_SECONDS",
         "RAG_RETRIEVAL_TOP_K",
         "QDRANT_URL",
         "QDRANT_COLLECTION_NAME",
@@ -46,6 +47,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.ollama_generation_model == "qwen3:4b-instruct"
     assert settings.ollama_embedding_model == "embeddinggemma"
     assert settings.ollama_embedding_dimensions == 768
+    assert settings.ollama_request_timeout_seconds == 120.0
     assert settings.rag_retrieval_top_k == 5
     assert settings.qdrant_url == "http://localhost:6333"
     assert settings.qdrant_collection_name == "ai_search_chunks"
@@ -68,6 +70,7 @@ def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("OLLAMA_GENERATION_MODEL", "test-ollama-generation")
     monkeypatch.setenv("OLLAMA_EMBEDDING_MODEL", "test-ollama-embedding")
     monkeypatch.setenv("OLLAMA_EMBEDDING_DIMENSIONS", "12")
+    monkeypatch.setenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "30")
     monkeypatch.setenv("RAG_RETRIEVAL_TOP_K", "7")
     monkeypatch.setenv("QDRANT_URL", "http://qdrant.test:6333")
     monkeypatch.setenv("QDRANT_COLLECTION_NAME", "test_chunks")
@@ -92,6 +95,7 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.ollama_generation_model == "test-ollama-generation"
     assert settings.ollama_embedding_model == "test-ollama-embedding"
     assert settings.ollama_embedding_dimensions == 12
+    assert settings.ollama_request_timeout_seconds == 30.0
     assert settings.rag_retrieval_top_k == 7
     assert settings.qdrant_url == "http://qdrant.test:6333"
     assert settings.qdrant_collection_name == "test_chunks"

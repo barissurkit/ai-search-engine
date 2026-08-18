@@ -11,6 +11,7 @@ class OllamaLLMProvider:
     def __init__(self, settings: Settings, client: httpx.AsyncClient) -> None:
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._model = settings.ollama_generation_model
+        self._timeout = httpx.Timeout(settings.ollama_request_timeout_seconds)
         self._client = client
 
     async def generate(self, prompt: str) -> str:
@@ -20,6 +21,7 @@ class OllamaLLMProvider:
             response = await self._client.post(
                 f"{self._base_url}/api/generate",
                 json={"model": self._model, "prompt": prompt, "stream": False},
+                timeout=self._timeout,
             )
             response.raise_for_status()
             payload = response.json()

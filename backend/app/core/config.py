@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     ollama_generation_model: str = "qwen3:4b-instruct"
     ollama_embedding_model: str = "embeddinggemma"
     ollama_embedding_dimensions: int = 768
+    ollama_request_timeout_seconds: float = 120.0
     rag_retrieval_top_k: int = 5
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "ai_search_chunks"
