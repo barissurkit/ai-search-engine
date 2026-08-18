@@ -13,3 +13,4 @@ class Document(BaseModel):
     content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     source_url: str
     final_url: str
+    title: str | None = None

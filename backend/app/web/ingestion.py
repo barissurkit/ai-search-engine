@@ -55,6 +55,7 @@ class WebIngestionService:
                 content=content,
                 source_url=page.source_url,
                 final_url=page.final_url,
+                title=result.title,
             )
         except (WebFetchError, ContentExtractionError):
             logger.warning("Web ingestion failed for a search result.")
