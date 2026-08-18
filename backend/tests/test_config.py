@@ -12,6 +12,15 @@ def test_settings_defaults(monkeypatch):
         "OPENAI_API_KEY",
         "OPENAI_EMBEDDING_MODEL",
         "OPENAI_EMBEDDING_DIMENSIONS",
+        "OPENAI_GENERATION_MODEL",
+        "LLM_PROVIDER",
+        "EMBEDDING_PROVIDER",
+        "OLLAMA_BASE_URL",
+        "OLLAMA_GENERATION_MODEL",
+        "OLLAMA_EMBEDDING_MODEL",
+        "OLLAMA_EMBEDDING_DIMENSIONS",
+        "OLLAMA_REQUEST_TIMEOUT_SECONDS",
+        "RAG_RETRIEVAL_TOP_K",
         "QDRANT_URL",
         "QDRANT_COLLECTION_NAME",
         "WEB_FETCH_TIMEOUT_SECONDS",
@@ -31,6 +40,15 @@ def test_settings_defaults(monkeypatch):
     assert settings.openai_api_key is None
     assert settings.openai_embedding_model == "text-embedding-3-small"
     assert settings.openai_embedding_dimensions == 1536
+    assert settings.openai_generation_model == "gpt-5.6-terra"
+    assert settings.llm_provider == "ollama"
+    assert settings.embedding_provider == "ollama"
+    assert settings.ollama_base_url == "http://localhost:11434"
+    assert settings.ollama_generation_model == "qwen3:4b-instruct"
+    assert settings.ollama_embedding_model == "embeddinggemma"
+    assert settings.ollama_embedding_dimensions == 768
+    assert settings.ollama_request_timeout_seconds == 120.0
+    assert settings.rag_retrieval_top_k == 5
     assert settings.qdrant_url == "http://localhost:6333"
     assert settings.qdrant_collection_name == "ai_search_chunks"
     assert settings.web_fetch_timeout_seconds == 10.0
@@ -45,6 +63,15 @@ def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test-secret")
     monkeypatch.setenv("OPENAI_EMBEDDING_MODEL", "test-embedding-model")
     monkeypatch.setenv("OPENAI_EMBEDDING_DIMENSIONS", "8")
+    monkeypatch.setenv("OPENAI_GENERATION_MODEL", "test-generation-model")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "openai")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.test")
+    monkeypatch.setenv("OLLAMA_GENERATION_MODEL", "test-ollama-generation")
+    monkeypatch.setenv("OLLAMA_EMBEDDING_MODEL", "test-ollama-embedding")
+    monkeypatch.setenv("OLLAMA_EMBEDDING_DIMENSIONS", "12")
+    monkeypatch.setenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "30")
+    monkeypatch.setenv("RAG_RETRIEVAL_TOP_K", "7")
     monkeypatch.setenv("QDRANT_URL", "http://qdrant.test:6333")
     monkeypatch.setenv("QDRANT_COLLECTION_NAME", "test_chunks")
     monkeypatch.setenv("WEB_FETCH_TIMEOUT_SECONDS", "5.5")
@@ -61,6 +88,15 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.openai_api_key.get_secret_value() == "openai-test-secret"
     assert settings.openai_embedding_model == "test-embedding-model"
     assert settings.openai_embedding_dimensions == 8
+    assert settings.openai_generation_model == "test-generation-model"
+    assert settings.llm_provider == "openai"
+    assert settings.embedding_provider == "openai"
+    assert settings.ollama_base_url == "http://ollama.test"
+    assert settings.ollama_generation_model == "test-ollama-generation"
+    assert settings.ollama_embedding_model == "test-ollama-embedding"
+    assert settings.ollama_embedding_dimensions == 12
+    assert settings.ollama_request_timeout_seconds == 30.0
+    assert settings.rag_retrieval_top_k == 7
     assert settings.qdrant_url == "http://qdrant.test:6333"
     assert settings.qdrant_collection_name == "test_chunks"
     assert settings.web_fetch_timeout_seconds == 5.5

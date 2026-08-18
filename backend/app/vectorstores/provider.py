@@ -15,10 +15,12 @@ class VectorStore(Protocol):
         self,
         chunks: list[DocumentChunk],
         vectors: list[list[float]],
+        scope_id: str,
     ) -> None: ...
 
     async def search(
         self,
         query_vector: list[float],
         limit: int,
+        scope_id: str,
     ) -> list[ScoredDocumentChunk]: ...

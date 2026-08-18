@@ -102,12 +102,12 @@ def test_initialize_rejects_an_existing_incompatible_collection():
         asyncio.run(create_store(client).initialize_collection())
 
 
-def test_upsert_preserves_chunk_metadata_in_payload_with_stable_id():
+def test_upsert_preserves_chunk_metadata_and_scope_in_payload_with_stable_id():
     client = FakeQdrantClient()
     store = create_store(client)
 
-    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]]))
-    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]]))
+    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]], "scope-one"))
+    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]], "scope-one"))
 
     first_point = client.upsert_calls[0]["points"][0]
     second_point = client.upsert_calls[1]["points"][0]
@@ -118,14 +118,25 @@ def test_upsert_preserves_chunk_metadata_in_payload_with_stable_id():
         "final_url": "https://example.com/final",
         "title": "Example",
         "chunk_index": 2,
+        "retrieval_scope_id": "scope-one",
     }
+
+
+def test_upsert_uses_different_point_ids_for_different_scopes():
+    client = FakeQdrantClient()
+    store = create_store(client)
+
+    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]], "scope-one"))
+    asyncio.run(store.upsert([chunk()], [[0.1, 0.2, 0.3]], "scope-two"))
+
+    assert client.upsert_calls[0]["points"][0].id != client.upsert_calls[1]["points"][0].id
 
 
 def test_upsert_rejects_vector_dimension_mismatch_before_client_call():
     client = FakeQdrantClient()
 
     with pytest.raises(VectorStoreError, match="dimension"):
-        asyncio.run(create_store(client).upsert([chunk()], [[0.1, 0.2]]))
+        asyncio.run(create_store(client).upsert([chunk()], [[0.1, 0.2]], "scope-one"))
 
     assert client.upsert_calls == []
 
@@ -142,15 +153,19 @@ def test_search_passes_top_k_and_normalizes_scored_chunks():
                         "final_url": "https://example.com/final",
                         "title": "Retrieved",
                         "chunk_index": 4,
+                        "retrieval_scope_id": "scope-one",
                     },
                 )
             ]
         )
     )
 
-    results = asyncio.run(create_store(client).search([0.1, 0.2, 0.3], limit=7))
+    results = asyncio.run(create_store(client).search([0.1, 0.2, 0.3], limit=7, scope_id="scope-one"))
 
     assert client.query_calls[0]["limit"] == 7
+    condition = client.query_calls[0]["query_filter"].must[0]
+    assert condition.key == "retrieval_scope_id"
+    assert condition.match.value == "scope-one"
     assert results == [
         ScoredDocumentChunk(
             chunk=DocumentChunk(
@@ -167,11 +182,37 @@ def test_search_passes_top_k_and_normalizes_scored_chunks():
 
 def test_search_rejects_malformed_payload():
     client = FakeQdrantClient(
-        query_response=SimpleNamespace(points=[SimpleNamespace(score=0.8, payload={})])
+        query_response=SimpleNamespace(
+            points=[SimpleNamespace(score=0.8, payload={"retrieval_scope_id": "scope-one"})]
+        )
     )
 
     with pytest.raises(VectorStoreError, match="response was invalid"):
-        asyncio.run(create_store(client).search([0.1, 0.2, 0.3], limit=1))
+        asyncio.run(create_store(client).search([0.1, 0.2, 0.3], limit=1, scope_id="scope-one"))
+
+
+def test_search_excludes_points_from_another_scope():
+    client = FakeQdrantClient(
+        query_response=SimpleNamespace(
+            points=[
+                SimpleNamespace(
+                    score=0.9,
+                    payload={
+                        "content": "Other scope",
+                        "source_url": "https://example.com/source",
+                        "final_url": "https://example.com/final",
+                        "title": "Other",
+                        "chunk_index": 1,
+                        "retrieval_scope_id": "scope-two",
+                    },
+                )
+            ]
+        )
+    )
+
+    results = asyncio.run(create_store(client).search([0.1, 0.2, 0.3], 1, "scope-one"))
+
+    assert results == []
 
 
 def test_client_error_becomes_safe_store_error():

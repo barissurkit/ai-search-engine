@@ -1,6 +1,7 @@
+import asyncio
 from importlib import import_module
 
-from fastapi.testclient import TestClient
+import httpx
 
 from app.api.dependencies.search import get_search_service
 from app.search.models import SearchResponse, SearchResult
@@ -20,13 +21,14 @@ def test_search_endpoint_returns_search_response():
                 )
             ]
 
+    async def get_fake_search_service() -> SearchService:
+        return SearchService(FakeSearchProvider())
+
     app = import_module("app.main").app
-    app.dependency_overrides[get_search_service] = lambda: SearchService(
-        FakeSearchProvider()
-    )
+    app.dependency_overrides[get_search_service] = get_fake_search_service
     try:
-        response = TestClient(app).post(
-            "/api/v1/search", json={"query": "artificial intelligence"}
+        response = asyncio.run(
+            _post(app, "/api/v1/search", {"query": "artificial intelligence"})
         )
     finally:
         app.dependency_overrides.clear()
@@ -40,12 +42,13 @@ def test_search_endpoint_rejects_blank_query():
         async def search(self, query: str) -> list[SearchResult]:
             raise AssertionError("Provider should not be called for an invalid request.")
 
+    async def get_fake_search_service() -> SearchService:
+        return SearchService(FakeSearchProvider())
+
     app = import_module("app.main").app
-    app.dependency_overrides[get_search_service] = lambda: SearchService(
-        FakeSearchProvider()
-    )
+    app.dependency_overrides[get_search_service] = get_fake_search_service
     try:
-        response = TestClient(app).post("/api/v1/search", json={"query": "   "})
+        response = asyncio.run(_post(app, "/api/v1/search", {"query": "   "}))
     finally:
         app.dependency_overrides.clear()
 
@@ -57,14 +60,21 @@ def test_search_endpoint_maps_provider_error_to_safe_response():
         async def search(self, query: str) -> list[SearchResult]:
             raise TavilyProviderError("sensitive upstream detail")
 
+    async def get_failing_search_service() -> SearchService:
+        return SearchService(FailingSearchProvider())
+
     app = import_module("app.main").app
-    app.dependency_overrides[get_search_service] = lambda: SearchService(
-        FailingSearchProvider()
-    )
+    app.dependency_overrides[get_search_service] = get_failing_search_service
     try:
-        response = TestClient(app).post("/api/v1/search", json={"query": "test"})
+        response = asyncio.run(_post(app, "/api/v1/search", {"query": "test"}))
     finally:
         app.dependency_overrides.clear()
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Search provider is unavailable."}
+
+
+async def _post(app: object, path: str, json: dict[str, str]) -> httpx.Response:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.post(path, json=json)

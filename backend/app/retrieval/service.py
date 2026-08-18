@@ -27,9 +27,10 @@ class RetrievalService:
         self._default_top_k = default_top_k
         self._collection_initialized = False
 
-    async def index(self, chunks: list[DocumentChunk]) -> None:
+    async def index(self, chunks: list[DocumentChunk], scope_id: str) -> None:
         if not chunks:
             return
+        self._validate_scope_id(scope_id)
 
         try:
             vectors = await self._embedding_provider.embed_batch(
@@ -47,17 +48,19 @@ class RetrievalService:
 
         await self._ensure_collection()
         try:
-            await self._vector_store.upsert(chunks, vectors)
+            await self._vector_store.upsert(chunks, vectors, scope_id)
         except Exception as exc:
             raise RetrievalServiceError("Document chunk indexing failed.") from exc
 
     async def retrieve(
         self,
         query: str,
+        scope_id: str,
         top_k: int | None = None,
     ) -> list[ScoredDocumentChunk]:
         if not query.strip():
             raise RetrievalServiceError("Retrieval query must not be empty.")
+        self._validate_scope_id(scope_id)
 
         limit = self._default_top_k if top_k is None else top_k
         if limit < 1:
@@ -71,7 +74,7 @@ class RetrievalService:
         self._validate_vector(query_vector)
         await self._ensure_collection()
         try:
-            return await self._vector_store.search(query_vector, limit)
+            return await self._vector_store.search(query_vector, limit, scope_id)
         except Exception as exc:
             raise RetrievalServiceError("Semantic retrieval search failed.") from exc
 
@@ -95,3 +98,8 @@ class RetrievalService:
             )
         ):
             raise RetrievalServiceError("Embedding vector was invalid.")
+
+    @staticmethod
+    def _validate_scope_id(scope_id: str) -> None:
+        if not isinstance(scope_id, str) or not scope_id.strip():
+            raise RetrievalServiceError("Retrieval scope id must not be empty.")
