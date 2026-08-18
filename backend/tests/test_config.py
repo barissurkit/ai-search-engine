@@ -9,6 +9,9 @@ def test_settings_defaults(monkeypatch):
         "DEBUG",
         "TAVILY_API_KEY",
         "TAVILY_BASE_URL",
+        "WEB_FETCH_TIMEOUT_SECONDS",
+        "WEB_FETCH_USER_AGENT",
+        "WEB_INGESTION_MAX_CONCURRENCY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -20,12 +23,18 @@ def test_settings_defaults(monkeypatch):
     assert settings.debug is False
     assert settings.tavily_api_key is None
     assert settings.tavily_base_url == "https://api.tavily.com"
+    assert settings.web_fetch_timeout_seconds == 10.0
+    assert settings.web_fetch_user_agent == "AI-Search-Engine/0.1"
+    assert settings.web_ingestion_max_concurrency == 3
 
 
 def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("APP_NAME", "Test API")
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test-secret")
+    monkeypatch.setenv("WEB_FETCH_TIMEOUT_SECONDS", "5.5")
+    monkeypatch.setenv("WEB_FETCH_USER_AGENT", "Test Fetcher/1.0")
+    monkeypatch.setenv("WEB_INGESTION_MAX_CONCURRENCY", "2")
 
     settings = Settings(_env_file=None)
 
@@ -33,4 +42,7 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.debug is True
     assert settings.tavily_api_key is not None
     assert settings.tavily_api_key.get_secret_value() == "tvly-test-secret"
+    assert settings.web_fetch_timeout_seconds == 5.5
+    assert settings.web_fetch_user_agent == "Test Fetcher/1.0"
+    assert settings.web_ingestion_max_concurrency == 2
     assert "tvly-test-secret" not in repr(settings)
