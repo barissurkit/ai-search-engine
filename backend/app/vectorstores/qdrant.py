@@ -43,6 +43,7 @@ class AsyncQdrantClientProtocol(Protocol):
         limit: int,
         with_payload: bool,
         with_vectors: bool,
+        query_filter: models.Filter,
     ) -> object: ...
 
 
@@ -104,17 +105,19 @@ class QdrantVectorStore:
         self,
         chunks: list[DocumentChunk],
         vectors: list[list[float]],
+        scope_id: str,
     ) -> None:
         if len(chunks) != len(vectors):
             raise VectorStoreError("Each document chunk requires one embedding vector.")
         if not chunks:
             return
+        self._validate_scope_id(scope_id)
         for vector in vectors:
             self._validate_vector(vector)
 
         points = [
             models.PointStruct(
-                id=self._point_id(chunk),
+                id=self._point_id(chunk, scope_id),
                 vector=vector,
                 payload={
                     "content": chunk.content,
@@ -122,6 +125,7 @@ class QdrantVectorStore:
                     "final_url": chunk.final_url,
                     "title": chunk.title,
                     "chunk_index": chunk.index,
+                    "retrieval_scope_id": scope_id,
                 },
             )
             for chunk, vector in zip(chunks, vectors, strict=True)
@@ -138,10 +142,12 @@ class QdrantVectorStore:
         self,
         query_vector: list[float],
         limit: int,
+        scope_id: str,
     ) -> list[ScoredDocumentChunk]:
         self._validate_vector(query_vector)
         if limit < 1:
             raise VectorStoreError("Search limit must be at least 1.")
+        self._validate_scope_id(scope_id)
 
         try:
             response = await self._client.query_points(
@@ -150,6 +156,14 @@ class QdrantVectorStore:
                 limit=limit,
                 with_payload=True,
                 with_vectors=False,
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="retrieval_scope_id",
+                            match=models.MatchValue(value=scope_id),
+                        )
+                    ]
+                ),
             )
         except Exception as exc:
             raise VectorStoreError("Qdrant similarity search failed.") from exc
@@ -158,7 +172,11 @@ class QdrantVectorStore:
         if not isinstance(points, list):
             raise VectorStoreError("Qdrant similarity search response was invalid.")
 
-        return [self._to_scored_chunk(point) for point in points]
+        return [
+            self._to_scored_chunk(point)
+            for point in points
+            if self._point_has_scope(point, scope_id)
+        ]
 
     def _validate_vector(self, vector: list[float]) -> None:
         if (
@@ -184,11 +202,21 @@ class QdrantVectorStore:
         return size
 
     @staticmethod
-    def _point_id(chunk: DocumentChunk) -> str:
+    def _validate_scope_id(scope_id: str) -> None:
+        if not isinstance(scope_id, str) or not scope_id.strip():
+            raise VectorStoreError("Retrieval scope id must not be empty.")
+
+    @staticmethod
+    def _point_id(chunk: DocumentChunk, scope_id: str) -> str:
         identity = "|".join(
-            [chunk.source_url, chunk.final_url, str(chunk.index), chunk.content]
+            [scope_id, chunk.source_url, chunk.final_url, str(chunk.index), chunk.content]
         )
         return str(uuid5(NAMESPACE_URL, identity))
+
+    @staticmethod
+    def _point_has_scope(point: object, scope_id: str) -> bool:
+        payload = getattr(point, "payload", None)
+        return isinstance(payload, dict) and payload.get("retrieval_scope_id") == scope_id
 
     @staticmethod
     def _to_scored_chunk(point: object) -> ScoredDocumentChunk:

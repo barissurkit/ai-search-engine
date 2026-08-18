@@ -40,8 +40,9 @@ class RAGService:
         search_results = await self._search(query)
         documents = await self._ingest(search_results)
         chunks = self._chunk_documents(documents)
-        await self._index(chunks)
-        retrieved_chunks = await self._retrieve(query)
+        scope_id = str(uuid4())
+        await self._index(chunks, scope_id)
+        retrieved_chunks = await self._retrieve(query, scope_id)
         prompt = self._build_prompt(query, retrieved_chunks)
         generated_answer = await self._generate(prompt.prompt)
 
@@ -82,16 +83,17 @@ class RAGService:
             raise RAGServiceError("RAG document chunking returned no chunks.")
         return chunks
 
-    async def _index(self, chunks) -> None:
+    async def _index(self, chunks, scope_id: str) -> None:
         try:
-            await self._retrieval_service.index(chunks)
+            await self._retrieval_service.index(chunks, scope_id=scope_id)
         except Exception as exc:
             raise RAGServiceError("RAG document indexing failed.") from exc
 
-    async def _retrieve(self, query: str):
+    async def _retrieve(self, query: str, scope_id: str):
         try:
             chunks = await self._retrieval_service.retrieve(
                 query,
+                scope_id=scope_id,
                 top_k=self._retrieval_top_k,
             )
         except Exception as exc:
@@ -111,3 +113,4 @@ class RAGService:
             return await self._llm_provider.generate(prompt)
         except Exception as exc:
             raise RAGServiceError("RAG answer generation failed.") from exc
+from uuid import uuid4

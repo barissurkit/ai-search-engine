@@ -87,18 +87,22 @@ class FakeRetrievalService:
         self.events = events
         self.retrieved = retrieved
         self.indexed_chunks: list[list[DocumentChunk]] = []
-        self.retrieve_calls: list[tuple[str, int]] = []
+        self.index_scope_ids: list[str] = []
+        self.retrieve_calls: list[tuple[str, str, int]] = []
         self.index_error: Exception | None = None
 
-    async def index(self, chunks: list[DocumentChunk]) -> None:
+    async def index(self, chunks: list[DocumentChunk], scope_id: str) -> None:
         self.events.append("index")
         self.indexed_chunks.append(chunks)
+        self.index_scope_ids.append(scope_id)
         if self.index_error is not None:
             raise self.index_error
 
-    async def retrieve(self, query: str, top_k: int) -> list[ScoredDocumentChunk]:
+    async def retrieve(
+        self, query: str, scope_id: str, top_k: int
+    ) -> list[ScoredDocumentChunk]:
         self.events.append("retrieve")
-        self.retrieve_calls.append((query, top_k))
+        self.retrieve_calls.append((query, scope_id, top_k))
         if isinstance(self.retrieved, Exception):
             raise self.retrieved
         return self.retrieved
@@ -165,12 +169,23 @@ def test_answer_runs_the_pipeline_in_order_and_preserves_citation_sources():
     assert ingestion.results == [[search_result()]]
     assert chunker.documents == [document()]
     assert retrieval.indexed_chunks == [[chunk()]]
-    assert retrieval.retrieve_calls == [("What happened?", 3)]
+    assert len(retrieval.index_scope_ids) == 1
+    assert retrieval.retrieve_calls == [("What happened?", retrieval.index_scope_ids[0], 3)]
     assert prompt_builder.calls == [("What happened?", [scored_chunk()])]
     assert llm.prompts == ["Grounded prompt"]
     assert answer.query == "What happened?"
     assert answer.answer == "Generated answer [1]."
     assert answer.sources == prompt_builder.prompt.sources
+
+
+def test_answer_uses_a_distinct_scope_for_each_request():
+    service, _, *_, retrieval, _, _ = create_service()
+
+    asyncio.run(service.answer("First question"))
+    asyncio.run(service.answer("Second question"))
+
+    assert len(set(retrieval.index_scope_ids)) == 2
+    assert [call[1] for call in retrieval.retrieve_calls] == retrieval.index_scope_ids
 
 
 @pytest.mark.parametrize("query", ["", "  ", "\n\t"])
