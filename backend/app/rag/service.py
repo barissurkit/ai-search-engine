@@ -56,6 +56,10 @@ class RAGService:
             sources=prompt.sources,
         )
 
+    @property
+    def supports_streaming(self) -> bool:
+        return isinstance(self._llm_provider, StreamingLLMProvider)
+
     async def stream_answer(self, query: str) -> AsyncIterator[RAGStreamEvent]:
         """Run the normal RAG pipeline while exposing provider-independent events."""
         try:
@@ -63,7 +67,7 @@ class RAGService:
                 yield RAGStreamProgress(stage=stage)
 
             assert prompt is not None
-            if not isinstance(self._llm_provider, StreamingLLMProvider):
+            if not self.supports_streaming:
                 raise RAGServiceError("Streaming answer generation is unavailable.")
             async for text in self._llm_provider.stream(prompt.prompt):
                 if text:
