@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection_name: str = "ai_search_chunks"
     web_fetch_timeout_seconds: float = 10.0
     web_fetch_user_agent: str = "AI-Search-Engine/0.1"
     web_ingestion_max_concurrency: int = 3

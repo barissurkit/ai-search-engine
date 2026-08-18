@@ -1,0 +1,211 @@
+from typing import Protocol
+from uuid import NAMESPACE_URL, uuid5
+
+from qdrant_client import AsyncQdrantClient, models
+
+from app.core.config import Settings
+from app.rag.models import DocumentChunk
+from app.vectorstores.models import ScoredDocumentChunk
+
+
+class VectorStoreConfigurationError(ValueError):
+    """Raised when vector store configuration is invalid."""
+
+
+class VectorStoreError(Exception):
+    """Raised when a vector store operation cannot be completed safely."""
+
+
+class AsyncQdrantClientProtocol(Protocol):
+    async def collection_exists(self, collection_name: str) -> bool: ...
+
+    async def get_collection(self, collection_name: str) -> object: ...
+
+    async def create_collection(
+        self,
+        *,
+        collection_name: str,
+        vectors_config: models.VectorParams,
+    ) -> bool: ...
+
+    async def upsert(
+        self,
+        *,
+        collection_name: str,
+        points: list[models.PointStruct],
+    ) -> object: ...
+
+    async def query_points(
+        self,
+        *,
+        collection_name: str,
+        query: list[float],
+        limit: int,
+        with_payload: bool,
+        with_vectors: bool,
+    ) -> object: ...
+
+
+class QdrantVectorStore:
+    def __init__(
+        self,
+        settings: Settings,
+        dimensions: int,
+        client: AsyncQdrantClientProtocol | None = None,
+    ) -> None:
+        if dimensions < 1:
+            raise VectorStoreConfigurationError("Vector dimensions must be at least 1.")
+        if not settings.qdrant_collection_name.strip():
+            raise VectorStoreConfigurationError("QDRANT_COLLECTION_NAME must not be empty.")
+
+        self._collection_name = settings.qdrant_collection_name
+        self._dimensions = dimensions
+        self._client = client or AsyncQdrantClient(url=settings.qdrant_url)
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    async def initialize_collection(self) -> None:
+        try:
+            collection_exists = await self._client.collection_exists(
+                self._collection_name
+            )
+        except Exception as exc:
+            raise VectorStoreError("Qdrant collection initialization failed.") from exc
+
+        if not collection_exists:
+            try:
+                await self._client.create_collection(
+                    collection_name=self._collection_name,
+                    vectors_config=models.VectorParams(
+                        size=self._dimensions,
+                        distance=models.Distance.COSINE,
+                    ),
+                )
+            except Exception as exc:
+                raise VectorStoreError("Qdrant collection initialization failed.") from exc
+            return
+
+        try:
+            collection = await self._client.get_collection(self._collection_name)
+            collection_dimensions = self._collection_dimensions(collection)
+        except VectorStoreError:
+            raise
+        except Exception as exc:
+            raise VectorStoreError("Qdrant collection initialization failed.") from exc
+
+        if collection_dimensions != self._dimensions:
+            raise VectorStoreConfigurationError(
+                "Qdrant collection vector dimension does not match expected dimension."
+            )
+
+    async def upsert(
+        self,
+        chunks: list[DocumentChunk],
+        vectors: list[list[float]],
+    ) -> None:
+        if len(chunks) != len(vectors):
+            raise VectorStoreError("Each document chunk requires one embedding vector.")
+        if not chunks:
+            return
+        for vector in vectors:
+            self._validate_vector(vector)
+
+        points = [
+            models.PointStruct(
+                id=self._point_id(chunk),
+                vector=vector,
+                payload={
+                    "content": chunk.content,
+                    "source_url": chunk.source_url,
+                    "final_url": chunk.final_url,
+                    "title": chunk.title,
+                    "chunk_index": chunk.index,
+                },
+            )
+            for chunk, vector in zip(chunks, vectors, strict=True)
+        ]
+        try:
+            await self._client.upsert(
+                collection_name=self._collection_name,
+                points=points,
+            )
+        except Exception as exc:
+            raise VectorStoreError("Qdrant vector upsert failed.") from exc
+
+    async def search(
+        self,
+        query_vector: list[float],
+        limit: int,
+    ) -> list[ScoredDocumentChunk]:
+        self._validate_vector(query_vector)
+        if limit < 1:
+            raise VectorStoreError("Search limit must be at least 1.")
+
+        try:
+            response = await self._client.query_points(
+                collection_name=self._collection_name,
+                query=query_vector,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception as exc:
+            raise VectorStoreError("Qdrant similarity search failed.") from exc
+
+        points = getattr(response, "points", None)
+        if not isinstance(points, list):
+            raise VectorStoreError("Qdrant similarity search response was invalid.")
+
+        return [self._to_scored_chunk(point) for point in points]
+
+    def _validate_vector(self, vector: list[float]) -> None:
+        if (
+            not isinstance(vector, list)
+            or len(vector) != self._dimensions
+            or any(
+                not isinstance(value, (int, float)) or isinstance(value, bool)
+                for value in vector
+            )
+        ):
+            raise VectorStoreError("Vector dimension or values were invalid.")
+
+    @staticmethod
+    def _collection_dimensions(collection: object) -> int:
+        vectors = getattr(
+            getattr(getattr(collection, "config", None), "params", None),
+            "vectors",
+            None,
+        )
+        size = getattr(vectors, "size", None)
+        if not isinstance(size, int):
+            raise VectorStoreError("Qdrant collection configuration was invalid.")
+        return size
+
+    @staticmethod
+    def _point_id(chunk: DocumentChunk) -> str:
+        identity = "|".join(
+            [chunk.source_url, chunk.final_url, str(chunk.index), chunk.content]
+        )
+        return str(uuid5(NAMESPACE_URL, identity))
+
+    @staticmethod
+    def _to_scored_chunk(point: object) -> ScoredDocumentChunk:
+        payload = getattr(point, "payload", None)
+        score = getattr(point, "score", None)
+        if not isinstance(payload, dict) or not isinstance(score, (int, float)):
+            raise VectorStoreError("Qdrant similarity search response was invalid.")
+
+        try:
+            chunk = DocumentChunk(
+                content=payload["content"],
+                source_url=payload["source_url"],
+                final_url=payload["final_url"],
+                title=payload.get("title"),
+                index=payload["chunk_index"],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise VectorStoreError("Qdrant similarity search response was invalid.") from exc
+
+        return ScoredDocumentChunk(chunk=chunk, score=float(score))

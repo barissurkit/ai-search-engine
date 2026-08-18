@@ -12,6 +12,8 @@ def test_settings_defaults(monkeypatch):
         "OPENAI_API_KEY",
         "OPENAI_EMBEDDING_MODEL",
         "OPENAI_EMBEDDING_DIMENSIONS",
+        "QDRANT_URL",
+        "QDRANT_COLLECTION_NAME",
         "WEB_FETCH_TIMEOUT_SECONDS",
         "WEB_FETCH_USER_AGENT",
         "WEB_INGESTION_MAX_CONCURRENCY",
@@ -29,6 +31,8 @@ def test_settings_defaults(monkeypatch):
     assert settings.openai_api_key is None
     assert settings.openai_embedding_model == "text-embedding-3-small"
     assert settings.openai_embedding_dimensions == 1536
+    assert settings.qdrant_url == "http://localhost:6333"
+    assert settings.qdrant_collection_name == "ai_search_chunks"
     assert settings.web_fetch_timeout_seconds == 10.0
     assert settings.web_fetch_user_agent == "AI-Search-Engine/0.1"
     assert settings.web_ingestion_max_concurrency == 3
@@ -41,6 +45,8 @@ def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test-secret")
     monkeypatch.setenv("OPENAI_EMBEDDING_MODEL", "test-embedding-model")
     monkeypatch.setenv("OPENAI_EMBEDDING_DIMENSIONS", "8")
+    monkeypatch.setenv("QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("QDRANT_COLLECTION_NAME", "test_chunks")
     monkeypatch.setenv("WEB_FETCH_TIMEOUT_SECONDS", "5.5")
     monkeypatch.setenv("WEB_FETCH_USER_AGENT", "Test Fetcher/1.0")
     monkeypatch.setenv("WEB_INGESTION_MAX_CONCURRENCY", "2")
@@ -55,6 +61,8 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.openai_api_key.get_secret_value() == "openai-test-secret"
     assert settings.openai_embedding_model == "test-embedding-model"
     assert settings.openai_embedding_dimensions == 8
+    assert settings.qdrant_url == "http://qdrant.test:6333"
+    assert settings.qdrant_collection_name == "test_chunks"
     assert settings.web_fetch_timeout_seconds == 5.5
     assert settings.web_fetch_user_agent == "Test Fetcher/1.0"
     assert settings.web_ingestion_max_concurrency == 2
