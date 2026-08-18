@@ -1,5 +1,7 @@
 import asyncio
+from collections.abc import AsyncIterator
 
+import httpx
 import pytest
 
 from app.api.dependencies.providers import (
@@ -36,6 +38,45 @@ class FakeClient:
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
+
+
+class FakeStreamResponse:
+    def __init__(self, lines: list[str], error: Exception | None = None) -> None:
+        self.lines = lines
+        self.error = error
+
+    def raise_for_status(self) -> None:
+        if self.error is not None:
+            raise self.error
+
+    async def aiter_lines(self) -> AsyncIterator[str]:
+        for line in self.lines:
+            yield line
+
+
+class FakeStreamContext:
+    def __init__(self, response: FakeStreamResponse) -> None:
+        self.response = response
+        self.closed = False
+
+    async def __aenter__(self) -> FakeStreamResponse:
+        return self.response
+
+    async def __aexit__(self, *args: object) -> None:
+        self.closed = True
+
+
+class FakeStreamingClient:
+    def __init__(self, context: FakeStreamContext, error: Exception | None = None) -> None:
+        self.context = context
+        self.error = error
+        self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def stream(self, *args: object, **kwargs: object) -> FakeStreamContext:
+        self.calls.append((args, kwargs))
+        if self.error is not None:
+            raise self.error
+        return self.context
 
 
 def ollama_settings(**values: object) -> Settings:
@@ -96,6 +137,102 @@ def test_ollama_generation_rejects_malformed_responses(payload: object):
 
     with pytest.raises(OllamaLLMProviderError, match="response was invalid"):
         asyncio.run(provider.generate("Prompt"))
+
+
+def test_ollama_generation_stream_yields_text_deltas_and_closes_response():
+    context = FakeStreamContext(
+        FakeStreamResponse(
+            [
+                '{"response":"First "}',
+                '{"response":""}',
+                '{"response":"second"}',
+                '{"done":true}',
+            ]
+        )
+    )
+    client = FakeStreamingClient(context)
+    provider = OllamaLLMProvider(ollama_settings(), client)  # type: ignore[arg-type]
+
+    async def collect() -> list[str]:
+        return [part async for part in provider.stream("Prompt")]
+
+    assert asyncio.run(collect()) == ["First ", "second"]
+    assert client.calls == [
+        (
+            ("POST", "http://localhost:11434/api/generate"),
+            {
+                "json": {"model": "qwen3:4b-instruct", "prompt": "Prompt", "stream": True},
+                "timeout": provider._timeout,
+            },
+        )
+    ]
+    assert context.closed is True
+
+
+@pytest.mark.parametrize("lines", [["not json"], ['[]'], ['{"done": false}']])
+def test_ollama_generation_stream_rejects_malformed_lines(lines: list[str]):
+    context = FakeStreamContext(FakeStreamResponse(lines))
+    provider = OllamaLLMProvider(ollama_settings(), FakeStreamingClient(context))  # type: ignore[arg-type]
+
+    async def collect() -> None:
+        async for _ in provider.stream("Prompt"):
+            pass
+
+    with pytest.raises(OllamaLLMProviderError, match="stream was invalid"):
+        asyncio.run(collect())
+    assert context.closed is True
+
+
+def test_ollama_generation_stream_rejects_empty_prompt_without_request():
+    context = FakeStreamContext(FakeStreamResponse([]))
+    client = FakeStreamingClient(context)
+    provider = OllamaLLMProvider(ollama_settings(), client)  # type: ignore[arg-type]
+
+    async def collect() -> None:
+        async for _ in provider.stream(" "):
+            pass
+
+    with pytest.raises(OllamaLLMProviderError, match="must not be empty"):
+        asyncio.run(collect())
+    assert client.calls == []
+
+
+def test_ollama_generation_stream_converts_http_and_network_errors_to_safe_errors():
+    request = httpx.Request("POST", "http://localhost:11434/api/generate")
+    status_error = httpx.HTTPStatusError(
+        "server error", request=request, response=httpx.Response(500, request=request)
+    )
+    response_context = FakeStreamContext(FakeStreamResponse([], error=status_error))
+    network_context = FakeStreamContext(FakeStreamResponse([]))
+    providers = [
+        OllamaLLMProvider(ollama_settings(), FakeStreamingClient(response_context)),  # type: ignore[arg-type]
+        OllamaLLMProvider(
+            ollama_settings(),
+            FakeStreamingClient(network_context, httpx.ReadTimeout("timeout", request=request)),
+        ),  # type: ignore[arg-type]
+    ]
+
+    async def collect(provider: OllamaLLMProvider) -> None:
+        async for _ in provider.stream("Prompt"):
+            pass
+
+    for provider in providers:
+        with pytest.raises(OllamaLLMProviderError, match="request failed"):
+            asyncio.run(collect(provider))
+
+
+def test_ollama_generation_stream_closes_response_when_consumer_stops_early():
+    context = FakeStreamContext(FakeStreamResponse(['{"response":"First"}', '{"response":"Second"}']))
+    provider = OllamaLLMProvider(ollama_settings(), FakeStreamingClient(context))  # type: ignore[arg-type]
+
+    async def consume_once() -> str:
+        stream = provider.stream("Prompt")
+        first = await anext(stream)
+        await stream.aclose()
+        return first
+
+    assert asyncio.run(consume_once()) == "First"
+    assert context.closed is True
 
 
 def test_provider_selector_uses_ollama_without_an_openai_key():
