@@ -6,3 +6,12 @@ dependencies = [
     "fastapi[standard]>=0.141.1",
     "pydantic-settings>=2.15.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.3",
+]
