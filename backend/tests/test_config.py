@@ -13,6 +13,7 @@ def test_settings_defaults(monkeypatch):
         "OPENAI_EMBEDDING_MODEL",
         "OPENAI_EMBEDDING_DIMENSIONS",
         "OPENAI_GENERATION_MODEL",
+        "RAG_RETRIEVAL_TOP_K",
         "QDRANT_URL",
         "QDRANT_COLLECTION_NAME",
         "WEB_FETCH_TIMEOUT_SECONDS",
@@ -33,6 +34,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.openai_embedding_model == "text-embedding-3-small"
     assert settings.openai_embedding_dimensions == 1536
     assert settings.openai_generation_model == "gpt-5.6-terra"
+    assert settings.rag_retrieval_top_k == 5
     assert settings.qdrant_url == "http://localhost:6333"
     assert settings.qdrant_collection_name == "ai_search_chunks"
     assert settings.web_fetch_timeout_seconds == 10.0
@@ -48,6 +50,7 @@ def test_settings_environment_overrides(monkeypatch):
     monkeypatch.setenv("OPENAI_EMBEDDING_MODEL", "test-embedding-model")
     monkeypatch.setenv("OPENAI_EMBEDDING_DIMENSIONS", "8")
     monkeypatch.setenv("OPENAI_GENERATION_MODEL", "test-generation-model")
+    monkeypatch.setenv("RAG_RETRIEVAL_TOP_K", "7")
     monkeypatch.setenv("QDRANT_URL", "http://qdrant.test:6333")
     monkeypatch.setenv("QDRANT_COLLECTION_NAME", "test_chunks")
     monkeypatch.setenv("WEB_FETCH_TIMEOUT_SECONDS", "5.5")
@@ -65,6 +68,7 @@ def test_settings_environment_overrides(monkeypatch):
     assert settings.openai_embedding_model == "test-embedding-model"
     assert settings.openai_embedding_dimensions == 8
     assert settings.openai_generation_model == "test-generation-model"
+    assert settings.rag_retrieval_top_k == 7
     assert settings.qdrant_url == "http://qdrant.test:6333"
     assert settings.qdrant_collection_name == "test_chunks"
     assert settings.web_fetch_timeout_seconds == 5.5
