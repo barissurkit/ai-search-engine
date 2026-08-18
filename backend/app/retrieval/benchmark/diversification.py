@@ -24,6 +24,8 @@ class SourceDiversificationCaseResult(BaseModel):
     diversified: EvaluationCaseResult
     baseline_unique_sources: int
     diversified_unique_sources: int
+    raw_source_sequence: list[str]
+    diversified_source_sequence: list[str]
     outcome: Literal["improved", "unchanged", "regressed"]
 
 
@@ -60,15 +62,19 @@ class SourceDiversificationBenchmark:
         retriever: ScoredRankedRetriever,
         diversifier: SourceDiversifier,
         evaluator: RetrievalEvaluator,
+        candidate_pool_k: int,
     ) -> None:
         self._retriever = retriever
         self._diversifier = diversifier
         self._evaluator = evaluator
+        validate_k(candidate_pool_k)
+        self._candidate_pool_k = candidate_pool_k
 
     async def run(self, cases: Sequence[EvaluationCase], k: int) -> SourceDiversificationReport:
         validate_k(k)
         raw_results: Mapping[str, Sequence[ScoredDocumentChunk]] = {
-            case.id: await self._retriever.retrieve(case.query, k) for case in cases
+            case.id: await self._retriever.retrieve(case.query, self._candidate_pool_k)
+            for case in cases
         }
         diversified_results = {
             case_id: self._diversifier.diversify(results, k)
@@ -83,6 +89,8 @@ class SourceDiversificationBenchmark:
                 diversified=diversified,
                 baseline_unique_sources=_unique_sources(raw_results[case.id], k),
                 diversified_unique_sources=_unique_sources(diversified_results[case.id], k),
+                raw_source_sequence=_source_sequence(raw_results[case.id]),
+                diversified_source_sequence=_source_sequence(diversified_results[case.id]),
                 outcome=_outcome(baseline, diversified),
             )
             for case, baseline, diversified in zip(
@@ -114,12 +122,17 @@ class SourceDiversificationBenchmark:
 def diversification_recommendation(report: SourceDiversificationReport) -> str:
     """Recommend integration only for an observed, non-regressing diversity benefit."""
     summary = report.summary
+    has_case_diversity_benefit = any(
+        result.diversified_unique_sources > result.baseline_unique_sources
+        for result in report.case_results
+    )
     if (
         summary.hit_rate_delta >= 0.0
         and summary.recall_delta >= 0.0
         and summary.reciprocal_rank_delta >= 0.0
         and summary.unique_sources_delta > 0.0
-        and summary.improved_case_count > summary.regressed_case_count
+        and has_case_diversity_benefit
+        and summary.regressed_case_count == 0
     ):
         return "INTEGRATE"
     return "DO NOT INTEGRATE YET"
@@ -130,6 +143,7 @@ def format_diversification_report(report: SourceDiversificationReport) -> str:
     for result in report.case_results:
         lines.append(
             f"{result.case_id} | "
+            f"raw={','.join(result.raw_source_sequence)} -> diversified={','.join(result.diversified_source_sequence)} | "
             f"baseline=H:{result.baseline.hit_rate_at_k:.3f},R:{result.baseline.recall_at_k:.3f},MRR:{result.baseline.reciprocal_rank:.3f},U:{result.baseline_unique_sources} | "
             f"diversified=H:{result.diversified.hit_rate_at_k:.3f},R:{result.diversified.recall_at_k:.3f},MRR:{result.diversified.reciprocal_rank:.3f},U:{result.diversified_unique_sources} | "
             f"classification={result.outcome}"
@@ -156,6 +170,10 @@ def _unique_sources(results: Sequence[ScoredDocumentChunk], k: int) -> int:
             if isinstance(result.chunk.final_url, str) and result.chunk.final_url.strip()
         }
     )
+
+
+def _source_sequence(results: Sequence[ScoredDocumentChunk]) -> list[str]:
+    return [result.chunk.final_url.rsplit("/", maxsplit=1)[-1] for result in results]
 
 
 def _outcome(baseline: EvaluationCaseResult, diversified: EvaluationCaseResult) -> str:

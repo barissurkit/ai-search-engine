@@ -16,6 +16,7 @@ from app.retrieval.benchmark.diversification import (
     format_diversification_report,
 )
 from app.retrieval.benchmark.fixtures import (
+    BENCHMARK_CANDIDATE_POOL_K,
     BENCHMARK_CASES,
     BENCHMARK_CHUNKS,
     BENCHMARK_COLLECTION_NAME,
@@ -54,6 +55,7 @@ async def main() -> None:
                 ScopedScoredRetriever(retrieval_service, BENCHMARK_SCOPE_ID),
                 SourceDiversifier(max_chunks_per_source=1),
                 RetrievalEvaluator(),
+                BENCHMARK_CANDIDATE_POOL_K,
             ).run(BENCHMARK_CASES, BENCHMARK_TOP_K)
             print(format_diversification_report(report))
     finally:

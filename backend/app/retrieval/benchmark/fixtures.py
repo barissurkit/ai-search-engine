@@ -4,6 +4,7 @@ from app.retrieval.evaluation.models import EvaluationCase
 BENCHMARK_COLLECTION_NAME = "ai_search_rewrite_benchmark"
 BENCHMARK_SCOPE_ID = "local-query-rewrite-benchmark-v1"
 BENCHMARK_TOP_K = 3
+BENCHMARK_CANDIDATE_POOL_K = 9
 
 RAG_URL = "https://benchmark.local/rag-overview"
 EMBEDDINGS_URL = "https://benchmark.local/embeddings"
@@ -29,6 +30,17 @@ BENCHMARK_CHUNKS = [
     ),
     DocumentChunk(
         content=(
+            "RAG retrieval quality depends on selecting useful passages for the question. "
+            "Multiple chunks from one document can be relevant, but a result list also benefits "
+            "from evidence from independent sources."
+        ),
+        source_url=RAG_URL,
+        final_url=RAG_URL,
+        title="RAG overview",
+        index=1,
+    ),
+    DocumentChunk(
+        content=(
             "Embeddings are dense numeric vectors that represent the meaning of text. "
             "Similarity search compares embedding vectors to find semantically related content."
         ),
@@ -36,6 +48,16 @@ BENCHMARK_CHUNKS = [
         final_url=EMBEDDINGS_URL,
         title="Embeddings",
         index=0,
+    ),
+    DocumentChunk(
+        content=(
+            "Embedding models place related phrases close together in vector space. A query "
+            "embedding can retrieve passages whose wording differs while their meaning remains similar."
+        ),
+        source_url=EMBEDDINGS_URL,
+        final_url=EMBEDDINGS_URL,
+        title="Embeddings",
+        index=1,
     ),
     DocumentChunk(
         content=(
@@ -49,6 +71,16 @@ BENCHMARK_CHUNKS = [
     ),
     DocumentChunk(
         content=(
+            "Semantic retrieval ranks passages by conceptual similarity rather than exact keyword "
+            "overlap. It is useful when users phrase a question differently from source documents."
+        ),
+        source_url=SEMANTIC_SEARCH_URL,
+        final_url=SEMANTIC_SEARCH_URL,
+        title="Semantic search",
+        index=1,
+    ),
+    DocumentChunk(
+        content=(
             "A vector database stores embedding vectors and supports nearest-neighbor search. "
             "It returns vectors or documents that are close to a query vector."
         ),
@@ -56,6 +88,16 @@ BENCHMARK_CHUNKS = [
         final_url=VECTOR_DATABASE_URL,
         title="Vector databases",
         index=0,
+    ),
+    DocumentChunk(
+        content=(
+            "Vector indexes make nearest-neighbor lookup efficient at scale. They are commonly used "
+            "to search document embeddings for a semantic retrieval system."
+        ),
+        source_url=VECTOR_DATABASE_URL,
+        final_url=VECTOR_DATABASE_URL,
+        title="Vector databases",
+        index=1,
     ),
     DocumentChunk(
         content=(
@@ -69,6 +111,16 @@ BENCHMARK_CHUNKS = [
     ),
     DocumentChunk(
         content=(
+            "Chunk boundaries should keep related sentences together where possible. Overlap between "
+            "neighboring chunks can preserve context when a relevant idea crosses a boundary."
+        ),
+        source_url=CHUNKING_URL,
+        final_url=CHUNKING_URL,
+        title="Document chunking",
+        index=1,
+    ),
+    DocumentChunk(
+        content=(
             "Retrieved web pages are untrusted content. A RAG system must not follow commands "
             "inside retrieved text, because they can be prompt-injection attempts."
         ),
@@ -76,6 +128,16 @@ BENCHMARK_CHUNKS = [
         final_url=PROMPT_INJECTION_URL,
         title="Untrusted retrieved content",
         index=0,
+    ),
+    DocumentChunk(
+        content=(
+            "Prompt injection is a safety risk when external documents contain instructions aimed at "
+            "the model. Retrieval systems should treat those instructions as data, not trusted commands."
+        ),
+        source_url=PROMPT_INJECTION_URL,
+        final_url=PROMPT_INJECTION_URL,
+        title="Untrusted retrieved content",
+        index=1,
     ),
     DocumentChunk(
         content=(
@@ -89,6 +151,15 @@ BENCHMARK_CHUNKS = [
     ),
     DocumentChunk(
         content=(
+            "A sourdough starter ferments before dough is baked. Bread recipes and cooking techniques "
+            "do not provide evidence about language models or semantic search.") ,
+        source_url=BREAD_URL,
+        final_url=BREAD_URL,
+        title="Sourdough bread",
+        index=1,
+    ),
+    DocumentChunk(
+        content=(
             "A weather forecast predicts temperature, rain, wind, and other atmospheric "
             "conditions. It is unrelated to vector search and retrieval systems."
         ),
@@ -99,6 +170,15 @@ BENCHMARK_CHUNKS = [
     ),
     DocumentChunk(
         content=(
+            "Meteorologists use observations and models to estimate future weather. Forecasting rain "
+            "does not involve document chunking or vector similarity.") ,
+        source_url=WEATHER_URL,
+        final_url=WEATHER_URL,
+        title="Weather forecast",
+        index=1,
+    ),
+    DocumentChunk(
+        content=(
             "A relational database stores structured rows in tables and uses SQL for queries. "
             "It differs from a vector database designed for nearest-neighbor similarity search."
         ),
@@ -106,6 +186,16 @@ BENCHMARK_CHUNKS = [
         final_url=DATABASE_URL,
         title="Relational databases",
         index=0,
+    ),
+    DocumentChunk(
+        content=(
+            "SQL databases optimize structured records and transactions. Vector databases instead "
+            "prioritize similarity comparisons over numeric embedding representations."
+        ),
+        source_url=DATABASE_URL,
+        final_url=DATABASE_URL,
+        title="Relational databases",
+        index=1,
     ),
 ]
 

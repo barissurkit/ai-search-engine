@@ -3,7 +3,11 @@ import runpy
 from pathlib import Path
 
 from app.rag.models import DocumentChunk
-from app.retrieval.benchmark.fixtures import BENCHMARK_CASES, BENCHMARK_CHUNKS
+from app.retrieval.benchmark.fixtures import (
+    BENCHMARK_CANDIDATE_POOL_K,
+    BENCHMARK_CASES,
+    BENCHMARK_CHUNKS,
+)
 from app.retrieval.benchmark.reporting import recommendation
 from app.retrieval.benchmark.retriever import ScopedRetrievalServiceRetriever
 from app.retrieval.evaluation.models import EvaluationCaseResult
@@ -35,11 +39,16 @@ class FakeRetrievalService:
 
 
 def test_benchmark_fixtures_are_stable_and_have_relevant_urls():
-    assert len(BENCHMARK_CHUNKS) == 9
+    assert len(BENCHMARK_CHUNKS) == 18
+    assert BENCHMARK_CANDIDATE_POOL_K > 3
     assert 8 <= len(BENCHMARK_CASES) <= 12
     assert len({case.id for case in BENCHMARK_CASES}) == len(BENCHMARK_CASES)
     assert all(case.relevant_sources for case in BENCHMARK_CASES)
     assert all(source.startswith("https://benchmark.local/") for case in BENCHMARK_CASES for source in case.relevant_sources)
+    chunk_count_by_source = {}
+    for chunk in BENCHMARK_CHUNKS:
+        chunk_count_by_source[chunk.final_url] = chunk_count_by_source.get(chunk.final_url, 0) + 1
+    assert all(count == 2 for count in chunk_count_by_source.values())
 
 
 def test_scoped_retriever_preserves_scope_and_top_k_and_normalizes_results():

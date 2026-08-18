@@ -1,7 +1,14 @@
 import pytest
 
 from app.rag.models import DocumentChunk
+from app.retrieval.benchmark.diversification import (
+    SourceDiversificationCaseResult,
+    SourceDiversificationReport,
+    SourceDiversificationSummary,
+    diversification_recommendation,
+)
 from app.retrieval.diversification import SourceDiversificationError, SourceDiversifier
+from app.retrieval.evaluation.models import EvaluationCaseResult
 from app.vectorstores.models import ScoredDocumentChunk
 
 
@@ -70,3 +77,44 @@ def test_missing_or_invalid_final_urls_are_not_grouped_together():
     second = result("b", 0, 0.8).model_copy(update={"chunk": result("b", 0, 0.8).chunk.model_copy(update={"final_url": " "})})
 
     assert SourceDiversifier(1).diversify([first, second], top_k=2) == [first, second]
+
+
+def test_diversity_benefit_without_relevance_regression_recommends_integration():
+    metrics = EvaluationCaseResult(
+        case_id="case", hit_rate_at_k=1.0, recall_at_k=1.0, reciprocal_rank=1.0
+    )
+    report = SourceDiversificationReport(
+        k=3,
+        case_results=[
+            SourceDiversificationCaseResult(
+                case_id="case",
+                baseline=metrics,
+                diversified=metrics,
+                baseline_unique_sources=2,
+                diversified_unique_sources=3,
+                raw_source_sequence=["source-a", "source-a", "source-b"],
+                diversified_source_sequence=["source-a", "source-b", "source-c"],
+                outcome="unchanged",
+            )
+        ],
+        summary=SourceDiversificationSummary(
+            evaluated_case_count=1,
+            baseline_mean_hit_rate_at_k=1.0,
+            diversified_mean_hit_rate_at_k=1.0,
+            hit_rate_delta=0.0,
+            baseline_mean_recall_at_k=1.0,
+            diversified_mean_recall_at_k=1.0,
+            recall_delta=0.0,
+            baseline_mean_reciprocal_rank=1.0,
+            diversified_mean_reciprocal_rank=1.0,
+            reciprocal_rank_delta=0.0,
+            baseline_mean_unique_sources_at_k=2.0,
+            diversified_mean_unique_sources_at_k=3.0,
+            unique_sources_delta=1.0,
+            improved_case_count=0,
+            unchanged_case_count=1,
+            regressed_case_count=0,
+        ),
+    )
+
+    assert diversification_recommendation(report) == "INTEGRATE"
