@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: ai-search-engine-api
+    runtime: python
+    plan: free
+    region: virginia
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LLM_PROVIDER
+        value: ollama
+      - key: EMBEDDING_PROVIDER
+        value: ollama
+      - key: TAVILY_BASE_URL
+        value: https://api.tavily.com
+      - key: OLLAMA_BASE_URL
+        value: https://ollama.com
+      - key: OLLAMA_GENERATION_MODEL
+        value: gpt-oss:20b
+      - key: QDRANT_COLLECTION_NAME
+        value: ai_search_engine_cloud_384
+      - key: QDRANT_CLOUD_INFERENCE_ENABLED
+        value: "true"
+      - key: QDRANT_INFERENCE_MODEL
+        value: intfloat/multilingual-e5-small
+      - key: QDRANT_INFERENCE_DIMENSIONS
+        value: "384"
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: OLLAMA_API_KEY
+        sync: false
