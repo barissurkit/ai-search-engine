@@ -38,6 +38,14 @@ describe('AnswerContent', () => {
     expect(screen.getByText(/missing \[7], malformed \[1a]/)).toBeInTheDocument()
   })
 
+  it('maps Unicode citations to the matching sources without creating invalid controls', () => {
+    render(<AnswerContent answer={'First 【1】, second 【2】, missing 【7】, malformed 【abc】.'} sources={sources} />)
+    expect(screen.getByRole('button', { name: 'View source 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View source 2' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View source 7' })).not.toBeInTheDocument()
+    expect(screen.getByText(/missing 【7】, malformed 【abc】/)).toBeInTheDocument()
+  })
+
   it('scrolls and focuses the matching source card on citation click', () => {
     const scrollIntoView = vi.fn()
     HTMLElement.prototype.scrollIntoView = scrollIntoView
