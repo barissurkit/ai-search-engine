@@ -131,6 +131,78 @@ def test_ollama_generation_sends_model_prompt_and_normalizes_text():
     assert client.calls[0][1]["timeout"].read == 120.0
 
 
+def test_ollama_providers_send_no_authorization_header_without_an_api_key():
+    embedding_client = FakeClient(FakeResponse({"embeddings": [[1.0] * 768]}))
+    generation_client = FakeClient(FakeResponse({"response": "Local answer."}))
+
+    asyncio.run(  # type: ignore[arg-type]
+        OllamaEmbeddingProvider(ollama_settings(), embedding_client).embed("text")
+    )
+    asyncio.run(  # type: ignore[arg-type]
+        OllamaLLMProvider(ollama_settings(), generation_client).generate("Prompt")
+    )
+
+    assert "headers" not in embedding_client.calls[0][1]
+    assert "headers" not in generation_client.calls[0][1]
+
+
+def test_ollama_providers_send_bearer_authorization_with_an_api_key():
+    settings = ollama_settings(ollama_api_key="ollama-test-secret")
+    embedding_client = FakeClient(FakeResponse({"embeddings": [[1.0] * 768]}))
+    generation_client = FakeClient(FakeResponse({"response": "Remote answer."}))
+
+    asyncio.run(  # type: ignore[arg-type]
+        OllamaEmbeddingProvider(settings, embedding_client).embed("text")
+    )
+    asyncio.run(  # type: ignore[arg-type]
+        OllamaLLMProvider(settings, generation_client).generate("Prompt")
+    )
+
+    assert embedding_client.calls[0][1]["headers"] == {
+        "Authorization": "Bearer ollama-test-secret"
+    }
+    assert generation_client.calls[0][1]["headers"] == {
+        "Authorization": "Bearer ollama-test-secret"
+    }
+    assert embedding_client.calls[0][1]["json"] == {
+        "model": "embeddinggemma",
+        "input": ["text"],
+    }
+    assert generation_client.calls[0][1]["json"] == {
+        "model": "qwen3:4b-instruct",
+        "prompt": "Prompt",
+        "stream": False,
+    }
+
+
+def test_ollama_stream_sends_authorization_and_keeps_ndjson_parsing():
+    context = FakeStreamContext(FakeStreamResponse(['{"response":"Remote "}', '{"done":true}']))
+    provider = OllamaLLMProvider(
+        ollama_settings(ollama_api_key="ollama-stream-secret"),
+        FakeStreamingClient(context),  # type: ignore[arg-type]
+    )
+
+    async def collect() -> list[str]:
+        return [part async for part in provider.stream("Prompt")]
+
+    assert asyncio.run(collect()) == ["Remote "]
+    assert provider._client.calls[0][1]["headers"] == {
+        "Authorization": "Bearer ollama-stream-secret"
+    }
+
+
+def test_ollama_authentication_errors_do_not_expose_api_keys():
+    client = FakeClient(httpx.ConnectError("ollama-test-secret connection failed"))
+    provider = OllamaLLMProvider(  # type: ignore[arg-type]
+        ollama_settings(ollama_api_key="ollama-test-secret"), client
+    )
+
+    with pytest.raises(OllamaLLMProviderError) as exc_info:
+        asyncio.run(provider.generate("Prompt"))
+
+    assert "ollama-test-secret" not in str(exc_info.value)
+
+
 @pytest.mark.parametrize("payload", [{}, {"response": " "}])
 def test_ollama_generation_rejects_malformed_responses(payload: object):
     provider = OllamaLLMProvider(ollama_settings(), FakeClient(FakeResponse(payload)))  # type: ignore[arg-type]

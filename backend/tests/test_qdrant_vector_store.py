@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import app.vectorstores.qdrant as qdrant_module
 from app.core.config import Settings
 from app.rag.models import DocumentChunk
 from app.vectorstores.models import ScoredDocumentChunk
@@ -85,6 +86,40 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     config = client.create_calls[0]["vectors_config"]
     assert config.size == 3
     assert config.distance.value == "Cosine"
+
+
+def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient:
+        def __init__(self, **kwargs: object) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(_env_file=None, qdrant_url="http://localhost:6333")
+
+    QdrantVectorStore(settings, dimensions=3)
+
+    assert calls == [{"url": "http://localhost:6333"}]
+
+
+def test_client_composition_passes_api_key_for_remote_qdrant(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient:
+        def __init__(self, **kwargs: object) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(
+        _env_file=None,
+        qdrant_url="https://qdrant.test",
+        qdrant_api_key="qdrant-test-secret",
+    )
+
+    QdrantVectorStore(settings, dimensions=3)
+
+    assert calls == [{"url": "https://qdrant.test", "api_key": "qdrant-test-secret"}]
 
 
 def test_initialize_keeps_an_existing_compatible_collection():

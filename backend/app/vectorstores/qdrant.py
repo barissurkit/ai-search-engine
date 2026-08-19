@@ -61,7 +61,17 @@ class QdrantVectorStore:
 
         self._collection_name = settings.qdrant_collection_name
         self._dimensions = dimensions
-        self._client = client or AsyncQdrantClient(url=settings.qdrant_url)
+        self._client = client or self._create_client(settings)
+
+    @staticmethod
+    def _create_client(settings: Settings) -> AsyncQdrantClient:
+        api_key = settings.qdrant_api_key
+        if api_key is None or not api_key.get_secret_value().strip():
+            return AsyncQdrantClient(url=settings.qdrant_url)
+        return AsyncQdrantClient(
+            url=settings.qdrant_url,
+            api_key=api_key.get_secret_value(),
+        )
 
     @property
     def dimensions(self) -> int:
