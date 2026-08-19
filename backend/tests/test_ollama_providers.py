@@ -241,6 +241,21 @@ def test_ollama_generation_stream_yields_text_deltas_and_closes_response():
     assert context.closed is True
 
 
+def test_ollama_thinking_chunks_are_not_answer_deltas():
+    context = FakeStreamContext(FakeStreamResponse(['{"thinking":"private reasoning","response":""}', '{"thinking":"more","response":"Answer"}', '{"done":true}']))
+    provider = OllamaLLMProvider(ollama_settings(), FakeStreamingClient(context))  # type: ignore[arg-type]
+
+    async def collect() -> list[str]:
+        return [part async for part in provider.stream("Prompt")]
+
+    assert asyncio.run(collect()) == ["Answer"]
+
+
+def test_ollama_non_streaming_response_excludes_thinking():
+    provider = OllamaLLMProvider(ollama_settings(), FakeClient(FakeResponse({"thinking": "private", "response": "Answer", "done": True})))  # type: ignore[arg-type]
+    assert asyncio.run(provider.generate("Prompt")) == "Answer"
+
+
 @pytest.mark.parametrize("lines", [["not json"], ['[]'], ['{"done": false}']])
 def test_ollama_generation_stream_rejects_malformed_lines(lines: list[str]):
     context = FakeStreamContext(FakeStreamResponse(lines))

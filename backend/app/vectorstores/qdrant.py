@@ -39,7 +39,7 @@ class AsyncQdrantClientProtocol(Protocol):
         self,
         *,
         collection_name: str,
-        query: list[float],
+        query: list[float] | models.Document,
         limit: int,
         with_payload: bool,
         with_vectors: bool,
@@ -61,21 +61,27 @@ class QdrantVectorStore:
 
         self._collection_name = settings.qdrant_collection_name
         self._dimensions = dimensions
+        self._uses_cloud_inference = settings.qdrant_cloud_inference_enabled
+        self._inference_model = settings.qdrant_inference_model
         self._client = client or self._create_client(settings)
 
     @staticmethod
     def _create_client(settings: Settings) -> AsyncQdrantClient:
         api_key = settings.qdrant_api_key
-        if api_key is None or not api_key.get_secret_value().strip():
-            return AsyncQdrantClient(url=settings.qdrant_url)
-        return AsyncQdrantClient(
-            url=settings.qdrant_url,
-            api_key=api_key.get_secret_value(),
-        )
+        kwargs: dict[str, object] = {"url": settings.qdrant_url}
+        if api_key is not None and api_key.get_secret_value().strip():
+            kwargs["api_key"] = api_key.get_secret_value()
+        if settings.qdrant_cloud_inference_enabled:
+            kwargs["cloud_inference"] = True
+        return AsyncQdrantClient(**kwargs)
 
     @property
     def dimensions(self) -> int:
         return self._dimensions
+
+    @property
+    def uses_cloud_inference(self) -> bool:
+        return self._uses_cloud_inference
 
     async def initialize_collection(self) -> None:
         try:
@@ -188,6 +194,39 @@ class QdrantVectorStore:
             if self._point_has_scope(point, scope_id)
         ]
 
+    async def upsert_with_inference(self, chunks: list[DocumentChunk], scope_id: str) -> None:
+        if not self._uses_cloud_inference:
+            raise VectorStoreConfigurationError("Qdrant cloud inference is not enabled.")
+        self._validate_scope_id(scope_id)
+        points = [
+            models.PointStruct(
+                id=self._point_id(chunk, scope_id),
+                vector=models.Document(text=chunk.content, model=self._inference_model),
+                payload=self._payload(chunk, scope_id),
+            )
+            for chunk in chunks
+        ]
+        try:
+            await self._client.upsert(collection_name=self._collection_name, points=points)
+        except Exception as exc:
+            raise VectorStoreError("Qdrant vector upsert failed.") from exc
+
+    async def search_with_inference(self, query: str, limit: int, scope_id: str) -> list[ScoredDocumentChunk]:
+        if not self._uses_cloud_inference:
+            raise VectorStoreConfigurationError("Qdrant cloud inference is not enabled.")
+        self._validate_scope_id(scope_id)
+        return await self._search(models.Document(text=query, model=self._inference_model), limit, scope_id)
+
+    async def _search(self, query: list[float] | models.Document, limit: int, scope_id: str) -> list[ScoredDocumentChunk]:
+        try:
+            response = await self._client.query_points(collection_name=self._collection_name, query=query, limit=limit, with_payload=True, with_vectors=False, query_filter=models.Filter(must=[models.FieldCondition(key="retrieval_scope_id", match=models.MatchValue(value=scope_id))]))
+        except Exception as exc:
+            raise VectorStoreError("Qdrant similarity search failed.") from exc
+        points = getattr(response, "points", None)
+        if not isinstance(points, list):
+            raise VectorStoreError("Qdrant similarity search response was invalid.")
+        return [self._to_scored_chunk(point) for point in points if self._point_has_scope(point, scope_id)]
+
     def _validate_vector(self, vector: list[float]) -> None:
         if (
             not isinstance(vector, list)
@@ -198,6 +237,10 @@ class QdrantVectorStore:
             )
         ):
             raise VectorStoreError("Vector dimension or values were invalid.")
+
+    @staticmethod
+    def _payload(chunk: DocumentChunk, scope_id: str) -> dict[str, object]:
+        return {"content": chunk.content, "source_url": chunk.source_url, "final_url": chunk.final_url, "title": chunk.title, "chunk_index": chunk.index, "retrieval_scope_id": scope_id}
 
     @staticmethod
     def _collection_dimensions(collection: object) -> int:

@@ -33,8 +33,9 @@ async def get_rag_service(
             httpx.AsyncClient() as web_client,
             create_ollama_client() as ollama_client,
         ):
-            embedding_provider = create_embedding_provider(settings, ollama_client)
-            vector_store = QdrantVectorStore(settings, embedding_provider.dimensions)
+            embedding_provider = None if settings.qdrant_cloud_inference_enabled else create_embedding_provider(settings, ollama_client)
+            dimensions = settings.qdrant_inference_dimensions if embedding_provider is None else embedding_provider.dimensions
+            vector_store = QdrantVectorStore(settings, dimensions)
             llm_provider = create_llm_provider(settings, ollama_client)
             yield RAGService(
                 search_service=SearchService(TavilySearchProvider(settings, web_client)),

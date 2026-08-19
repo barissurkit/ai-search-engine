@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
     qdrant_collection_name: str = "ai_search_chunks"
+    qdrant_cloud_inference_enabled: bool = False
+    qdrant_inference_model: str = ""
+    qdrant_inference_dimensions: int = Field(default=384, ge=1)
     cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     web_fetch_timeout_seconds: float = 10.0
     web_fetch_user_agent: str = "AI-Search-Engine/0.1"
@@ -64,6 +67,12 @@ class Settings(BaseSettings):
             if normalized and normalized not in origins:
                 origins.append(normalized)
         return tuple(origins)
+
+    @model_validator(mode="after")
+    def validate_cloud_inference(self) -> "Settings":
+        if self.qdrant_cloud_inference_enabled and not self.qdrant_inference_model.strip():
+            raise ValueError("QDRANT_INFERENCE_MODEL is required when cloud inference is enabled.")
+        return self
 
 
 @lru_cache

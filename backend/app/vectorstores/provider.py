@@ -9,6 +9,9 @@ class VectorStore(Protocol):
     @property
     def dimensions(self) -> int: ...
 
+    @property
+    def uses_cloud_inference(self) -> bool: ...
+
     async def initialize_collection(self) -> None: ...
 
     async def upsert(
@@ -23,4 +26,10 @@ class VectorStore(Protocol):
         query_vector: list[float],
         limit: int,
         scope_id: str,
+    ) -> list[ScoredDocumentChunk]: ...
+
+    async def upsert_with_inference(self, chunks: list[DocumentChunk], scope_id: str) -> None: ...
+
+    async def search_with_inference(
+        self, query: str, limit: int, scope_id: str
     ) -> list[ScoredDocumentChunk]: ...

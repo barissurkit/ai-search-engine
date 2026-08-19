@@ -40,6 +40,7 @@ class FakeVectorStore:
         *,
         dimensions: int = 3,
         search_results: list[ScoredDocumentChunk] | Exception | None = None,
+        cloud_inference: bool = False,
     ) -> None:
         self.dimensions = dimensions
         self.search_results = search_results if search_results is not None else []
@@ -48,6 +49,22 @@ class FakeVectorStore:
         self.search_calls: list[tuple[list[float], int, str]] = []
         self.initialize_error: Exception | None = None
         self.upsert_error: Exception | None = None
+        self.cloud_inference = cloud_inference
+        self.cloud_upsert_calls: list[tuple[list[DocumentChunk], str]] = []
+        self.cloud_search_calls: list[tuple[str, int, str]] = []
+
+    @property
+    def uses_cloud_inference(self) -> bool:
+        return self.cloud_inference
+
+    async def upsert_with_inference(self, chunks: list[DocumentChunk], scope_id: str) -> None:
+        self.cloud_upsert_calls.append((chunks, scope_id))
+
+    async def search_with_inference(self, query: str, limit: int, scope_id: str) -> list[ScoredDocumentChunk]:
+        self.cloud_search_calls.append((query, limit, scope_id))
+        if isinstance(self.search_results, Exception):
+            raise self.search_results
+        return self.search_results
 
     async def initialize_collection(self) -> None:
         self.initialize_calls += 1
@@ -93,6 +110,23 @@ def chunks() -> list[DocumentChunk]:
             index=1,
         ),
     ]
+
+
+def test_cloud_retrieval_uses_text_path_and_preserves_candidate_pool_and_diversification():
+    first = ScoredDocumentChunk(chunk=chunks()[0], score=0.9)
+    same_source = ScoredDocumentChunk(chunk=chunks()[0].model_copy(update={"index": 2}), score=0.8)
+    second_source = ScoredDocumentChunk(
+        chunk=chunks()[1].model_copy(update={"source_url": "https://example.com/other"}), score=0.7
+    )
+    store = FakeVectorStore(cloud_inference=True, search_results=[first, same_source, second_source])
+    service = RetrievalService(None, store, candidate_multiplier=3, max_chunks_per_source=1)
+
+    asyncio.run(service.index(chunks(), "scope-one"))
+    results = asyncio.run(service.retrieve("query text", "scope-one", top_k=2))
+
+    assert store.cloud_upsert_calls == [(chunks(), "scope-one")]
+    assert store.cloud_search_calls == [("query text", 6, "scope-one")]
+    assert len(results) == 2
 
 
 def test_index_embeds_chunk_content_once_and_preserves_vector_pairing():

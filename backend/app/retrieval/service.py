@@ -12,13 +12,13 @@ class RetrievalServiceError(Exception):
 class RetrievalService:
     def __init__(
         self,
-        embedding_provider: EmbeddingProvider,
+        embedding_provider: EmbeddingProvider | None,
         vector_store: VectorStore,
         default_top_k: int = 5,
         candidate_multiplier: int = 3,
         max_chunks_per_source: int = 1,
     ) -> None:
-        if embedding_provider.dimensions != vector_store.dimensions:
+        if embedding_provider is not None and embedding_provider.dimensions != vector_store.dimensions:
             raise RetrievalServiceError(
                 "Embedding provider and vector store dimensions must match."
             )
@@ -37,6 +37,8 @@ class RetrievalService:
         ):
             raise RetrievalServiceError("Max chunks per source must be at least 1.")
 
+        if embedding_provider is None and not vector_store.uses_cloud_inference:
+            raise RetrievalServiceError("An embedding provider is required without cloud inference.")
         self._embedding_provider = embedding_provider
         self._vector_store = vector_store
         self._default_top_k = default_top_k
@@ -48,6 +50,11 @@ class RetrievalService:
         if not chunks:
             return
         self._validate_scope_id(scope_id)
+
+        if self._vector_store.uses_cloud_inference:
+            await self._ensure_collection()
+            await self._vector_store.upsert_with_inference(chunks, scope_id)
+            return
 
         try:
             vectors = await self._embedding_provider.embed_batch(
@@ -82,6 +89,14 @@ class RetrievalService:
         limit = self._default_top_k if top_k is None else top_k
         if limit < 1:
             raise RetrievalServiceError("top_k must be at least 1.")
+
+        if self._vector_store.uses_cloud_inference:
+            await self._ensure_collection()
+            try:
+                candidates = await self._vector_store.search_with_inference(query, limit * self._candidate_multiplier, scope_id)
+            except Exception as exc:
+                raise RetrievalServiceError("Semantic retrieval search failed.") from exc
+            return self._source_diversifier.diversify(candidates, top_k=limit)
 
         try:
             query_vector = await self._embedding_provider.embed(query)

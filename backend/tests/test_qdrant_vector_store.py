@@ -122,6 +122,33 @@ def test_client_composition_passes_api_key_for_remote_qdrant(monkeypatch):
     assert calls == [{"url": "https://qdrant.test", "api_key": "qdrant-test-secret"}]
 
 
+def test_cloud_inference_composition_and_document_paths_preserve_text_and_scope(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient(FakeQdrantClient):
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__()
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(_env_file=None, qdrant_url="https://qdrant.test", qdrant_api_key="key", qdrant_cloud_inference_enabled=True, qdrant_inference_model="intfloat/multilingual-e5-small", qdrant_inference_dimensions=384)
+    store = QdrantVectorStore(settings, dimensions=settings.qdrant_inference_dimensions)
+    client = store._client
+
+    asyncio.run(store.upsert_with_inference([chunk()], "scope-one"))
+    asyncio.run(store.search_with_inference("question text", 7, "scope-one"))
+
+    assert calls == [{"url": "https://qdrant.test", "api_key": "key", "cloud_inference": True}]
+    point = client.upsert_calls[0]["points"][0]
+    assert point.vector.text == "A useful document chunk."
+    assert point.vector.model == "intfloat/multilingual-e5-small"
+    assert point.payload["retrieval_scope_id"] == "scope-one"
+    query = client.query_calls[0]["query"]
+    assert query.text == "question text"
+    assert query.model == "intfloat/multilingual-e5-small"
+    assert client.query_calls[0]["limit"] == 7
+
+
 def test_initialize_keeps_an_existing_compatible_collection():
     client = FakeQdrantClient(exists=True, collection=collection_with_dimensions(3))
 

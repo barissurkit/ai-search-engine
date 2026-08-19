@@ -159,6 +159,16 @@ def test_production_configuration_smoke_parses_remote_services_without_exposing_
     assert "ollama-production-secret" not in repr(settings)
 
 
+def test_cloud_inference_settings_are_opt_in_and_require_a_model():
+    assert Settings(_env_file=None).qdrant_cloud_inference_enabled is False
+    settings = Settings(_env_file=None, qdrant_cloud_inference_enabled=True, qdrant_inference_model="intfloat/multilingual-e5-small", qdrant_inference_dimensions=384)
+    assert settings.qdrant_inference_dimensions == 384
+    with pytest.raises(ValueError, match="QDRANT_INFERENCE_MODEL"):
+        Settings(_env_file=None, qdrant_cloud_inference_enabled=True)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, qdrant_inference_dimensions=0)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
