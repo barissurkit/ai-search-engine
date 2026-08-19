@@ -9,6 +9,10 @@ A source-grounded AI search application that combines live web search, semantic 
 
 > The API is deployed on Render's free tier, so its first request after inactivity can take longer while the service starts.
 
+## Preview
+
+![AI Search result showing a streamed comparison answer with citations and a table](docs/images/ai-search-demo.png)
+
 ## What It Does
 
 1. A user asks a question in the React interface.
@@ -253,4 +257,4 @@ The frontend is deployed to Vercel and the FastAPI backend to Render. [`render.y
 
 ## License
 
-No license file is currently included in this repository.
+This project is licensed under the [MIT License](LICENSE).
