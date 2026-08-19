@@ -28,6 +28,10 @@ class AsyncQdrantClientProtocol(Protocol):
         vectors_config: models.VectorParams,
     ) -> bool: ...
 
+    async def create_payload_index(
+        self, *, collection_name: str, field_name: str, field_schema: object
+    ) -> object: ...
+
     async def upsert(
         self,
         *,
@@ -102,20 +106,27 @@ class QdrantVectorStore:
                 )
             except Exception as exc:
                 raise VectorStoreError("Qdrant collection initialization failed.") from exc
-            return
+        else:
+            try:
+                collection = await self._client.get_collection(self._collection_name)
+                collection_dimensions = self._collection_dimensions(collection)
+            except VectorStoreError:
+                raise
+            except Exception as exc:
+                raise VectorStoreError("Qdrant collection initialization failed.") from exc
 
+            if collection_dimensions != self._dimensions:
+                raise VectorStoreConfigurationError(
+                    "Qdrant collection vector dimension does not match expected dimension."
+                )
         try:
-            collection = await self._client.get_collection(self._collection_name)
-            collection_dimensions = self._collection_dimensions(collection)
-        except VectorStoreError:
-            raise
+            await self._client.create_payload_index(
+                collection_name=self._collection_name,
+                field_name="retrieval_scope_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
         except Exception as exc:
             raise VectorStoreError("Qdrant collection initialization failed.") from exc
-
-        if collection_dimensions != self._dimensions:
-            raise VectorStoreConfigurationError(
-                "Qdrant collection vector dimension does not match expected dimension."
-            )
 
     async def upsert(
         self,

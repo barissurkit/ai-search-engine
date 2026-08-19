@@ -29,6 +29,7 @@ class FakeQdrantClient:
         self.create_calls: list[dict[str, object]] = []
         self.upsert_calls: list[dict[str, object]] = []
         self.query_calls: list[dict[str, object]] = []
+        self.payload_index_calls: list[dict[str, object]] = []
 
     async def collection_exists(self, collection_name: str) -> bool:
         return self.exists
@@ -41,6 +42,9 @@ class FakeQdrantClient:
     async def create_collection(self, **kwargs: object) -> bool:
         self.create_calls.append(kwargs)
         return True
+
+    async def create_payload_index(self, **kwargs: object) -> None:
+        self.payload_index_calls.append(kwargs)
 
     async def upsert(self, **kwargs: object) -> None:
         self.upsert_calls.append(kwargs)
@@ -86,6 +90,11 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     config = client.create_calls[0]["vectors_config"]
     assert config.size == 3
     assert config.distance.value == "Cosine"
+    assert client.payload_index_calls == [{
+        "collection_name": "test_chunks",
+        "field_name": "retrieval_scope_id",
+        "field_schema": qdrant_module.models.PayloadSchemaType.KEYWORD,
+    }]
 
 
 def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
