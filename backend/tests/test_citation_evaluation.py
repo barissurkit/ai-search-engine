@@ -25,6 +25,8 @@ def sources(count: int) -> list[CitationSource]:
         ("Malformed [abc] [-1] [1a] [] [ 1] are ignored.", []),
         ("Multi-digit [12].", [12]),
         ("Unicode 【12】 then [1].", [12, 1]),
+        ("Grouped [1, 2] and 【3,4】.", [1, 2, 3, 4]),
+        ("Duplicates [1,1] and zero [0,2].", [1, 1, 0, 2]),
         ("Malformed 【abc】 【-1】 【1a】 【】.", []),
     ],
 )
@@ -80,6 +82,15 @@ def test_audit_mixed_unicode_markers_preserves_validity_and_coverage():
     assert audit.valid_marker_count == 3
     assert audit.invalid_reference_numbers == [7]
     assert audit.valid_citation_rate == 0.75
+    assert audit.source_coverage == 1.0
+
+
+def test_audit_grouped_markers_uses_each_reference_for_metrics():
+    audit = CitationAuditor().audit("A [1,2]. B 【2, 3】.", sources(3))
+
+    assert audit.citation_markers == [1, 2, 2, 3]
+    assert audit.valid_marker_count == 4
+    assert audit.unique_valid_source_count == 3
     assert audit.source_coverage == 1.0
 
 

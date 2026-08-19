@@ -66,6 +66,14 @@ describe('AnswerContent', () => {
     expect(screen.getByText(/missing 【7】, malformed 【abc】/)).toBeInTheDocument()
   })
 
+  it('maps grouped ASCII and Unicode citations individually without fake sources', () => {
+    render(<AnswerContent answer={'Grouped [1,2] and 【1, 7】; malformed [1,a].'} sources={sources} />)
+    expect(screen.getAllByRole('button', { name: 'View source 1' })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'View source 2' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View source 7' })).not.toBeInTheDocument()
+    expect(screen.getByText(/malformed \[1,a]/)).toBeInTheDocument()
+  })
+
   it('scrolls and focuses the matching source card on citation click', () => {
     const scrollIntoView = vi.fn()
     HTMLElement.prototype.scrollIntoView = scrollIntoView
