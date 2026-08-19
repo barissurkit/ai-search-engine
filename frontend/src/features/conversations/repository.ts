@@ -1,0 +1,32 @@
+import type { Conversation } from './types'
+
+export interface ConversationRepository {
+  list(): Promise<Conversation[]>
+  get(id: string): Promise<Conversation | undefined>
+  put(conversation: Conversation): Promise<void>
+  delete(id: string): Promise<void>
+}
+
+const memory = new Map<string, Conversation>()
+const DB_NAME = 'ai-search-conversations'
+const STORE = 'conversations'
+
+function sort(conversations: Conversation[]) { return conversations.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) }
+function request<T>(value: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { value.onsuccess = () => resolve(value.result); value.onerror = () => reject(value.error) }) }
+
+export function createConversationRepository(): ConversationRepository {
+  if (typeof indexedDB === 'undefined') return {
+    async list() { return sort([...memory.values()]) }, async get(id) { return memory.get(id) }, async put(value) { memory.set(value.id, value) }, async delete(id) { memory.delete(id) },
+  }
+  const db = new Promise<IDBDatabase>((resolve, reject) => {
+    const open = indexedDB.open(DB_NAME, 1)
+    open.onupgradeneeded = () => { if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE, { keyPath: 'id' }) }
+    open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error)
+  })
+  return {
+    async list() { const database = await db; return sort(await request(database.transaction(STORE).objectStore(STORE).getAll())) },
+    async get(id) { const database = await db; return request(database.transaction(STORE).objectStore(STORE).get(id)) },
+    async put(value) { const database = await db; await request(database.transaction(STORE, 'readwrite').objectStore(STORE).put(value)) },
+    async delete(id) { const database = await db; await request(database.transaction(STORE, 'readwrite').objectStore(STORE).delete(id)) },
+  }
+}
