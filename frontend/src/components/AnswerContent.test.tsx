@@ -37,6 +37,13 @@ describe('AnswerContent', () => {
     expect(screen.getByRole('cell', { name: 'Semantic retrieval' })).toBeInTheDocument()
   })
 
+  it('preserves two- and three-column table content', () => {
+    render(<AnswerContent answer={'| Benefit | Explanation | Source |\n| --- | --- | --- |\n| Reliable | Details | [1] |\n\n| Concept | Description |\n| --- | --- |\n| RAG | Grounded answers |'} sources={sources} />)
+    expect(screen.getByRole('columnheader', { name: 'Source' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View source 1' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Grounded answers' })).toBeInTheDocument()
+  })
+
   it('maps valid citations to source controls and leaves invalid markers as text', () => {
     render(<AnswerContent answer={'First [1], second [2], missing [7], malformed [1a].'} sources={sources} />)
     expect(screen.getByRole('button', { name: 'View source 1' })).toBeInTheDocument()
