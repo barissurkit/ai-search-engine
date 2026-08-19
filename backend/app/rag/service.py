@@ -4,6 +4,7 @@ from typing import Literal
 
 from app.llm.provider import LLMProvider, StreamingLLMProvider
 from app.rag.chunking import DocumentChunker
+from app.rag.conversation import bound_history, compose_search_query
 from app.rag.models import (
     RAGAnswer,
     RAGPrompt,
@@ -16,6 +17,7 @@ from app.rag.models import (
 )
 from app.rag.prompt import RAGPromptBuilder
 from app.retrieval.service import RetrievalService
+from app.search.models import ConversationTurn
 from app.search.service import SearchService
 from app.web.ingestion import WebIngestionService
 
@@ -46,8 +48,8 @@ class RAGService:
         self._llm_provider = llm_provider
         self._retrieval_top_k = retrieval_top_k
 
-    async def answer(self, query: str) -> RAGAnswer:
-        prompt = await self._prepare_prompt(query)
+    async def answer(self, query: str, history: list[ConversationTurn] | None = None) -> RAGAnswer:
+        prompt = await self._prepare_prompt(query, history)
         generated_answer = await self._generate(prompt.prompt)
 
         return RAGAnswer(
@@ -60,10 +62,10 @@ class RAGService:
     def supports_streaming(self) -> bool:
         return isinstance(self._llm_provider, StreamingLLMProvider)
 
-    async def stream_answer(self, query: str) -> AsyncIterator[RAGStreamEvent]:
+    async def stream_answer(self, query: str, history: list[ConversationTurn] | None = None) -> AsyncIterator[RAGStreamEvent]:
         """Run the normal RAG pipeline while exposing provider-independent events."""
         try:
-            async for stage, prompt in self._prepare_prompt_stages(query):
+            async for stage, prompt in self._prepare_prompt_stages(query, history):
                 yield RAGStreamProgress(stage=stage)
 
             assert prompt is not None
@@ -81,29 +83,31 @@ class RAGService:
         yield RAGStreamSources(sources=prompt.sources)
         yield RAGStreamComplete()
 
-    async def _prepare_prompt(self, query: str) -> RAGPrompt:
+    async def _prepare_prompt(self, query: str, history: list[ConversationTurn] | None = None) -> RAGPrompt:
         prompt: RAGPrompt | None = None
-        async for _, prompt in self._prepare_prompt_stages(query):
+        async for _, prompt in self._prepare_prompt_stages(query, history):
             pass
         assert prompt is not None
         return prompt
 
     async def _prepare_prompt_stages(
-        self, query: str
+        self, query: str, history: list[ConversationTurn] | None = None
     ) -> AsyncIterator[tuple[Literal["searching", "ingesting", "retrieving", "generating"], RAGPrompt | None]]:
         if not isinstance(query, str) or not query.strip():
             raise RAGServiceError("RAG query must not be empty.")
 
+        bounded_history = bound_history(history)
+        search_query = compose_search_query(query, bounded_history)
         yield "searching", None
-        search_results = await self._search(query)
+        search_results = await self._search(search_query)
         yield "ingesting", None
         documents = await self._ingest(search_results)
         chunks = self._chunk_documents(documents)
         yield "retrieving", None
         scope_id = str(uuid4())
         await self._index(chunks, scope_id)
-        retrieved_chunks = await self._retrieve(query, scope_id)
-        prompt = self._build_prompt(query, retrieved_chunks)
+        retrieved_chunks = await self._retrieve(search_query, scope_id)
+        prompt = self._build_prompt(query, retrieved_chunks, bounded_history)
         yield "generating", prompt
 
     async def _search(self, query: str):
@@ -156,8 +160,10 @@ class RAGService:
             raise RAGServiceError("RAG retrieval returned no context.")
         return chunks
 
-    def _build_prompt(self, query: str, retrieved_chunks):
+    def _build_prompt(self, query: str, retrieved_chunks, history: list[ConversationTurn]):
         try:
+            if history:
+                return self._prompt_builder.build(query, retrieved_chunks, history)
             return self._prompt_builder.build(query, retrieved_chunks)
         except Exception as exc:
             raise RAGServiceError("RAG prompt building failed.") from exc

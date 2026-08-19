@@ -6,11 +6,12 @@ interface SearchComposerProps {
   onSubmit: (query: string) => void
   disabled?: boolean
   autoFocus?: boolean
+  placeholder?: string
 }
 
 const maxTextareaHeight = 176
 
-export function SearchComposer({ query, onQueryChange, onSubmit, disabled = false, autoFocus = false }: SearchComposerProps) {
+export function SearchComposer({ query, onQueryChange, onSubmit, disabled = false, autoFocus = false, placeholder = 'Search and ask anything' }: SearchComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
             submit()
           }
         }}
-        placeholder="Search and ask anything"
+        placeholder={placeholder}
         rows={1}
         disabled={disabled}
         autoFocus={autoFocus}

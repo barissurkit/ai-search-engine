@@ -19,6 +19,8 @@ async def answer(
     service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> RAGAnswer:
     try:
+        if request.history:
+            return await service.answer(request.query, request.history)
         return await service.answer(request.query)
     except RAGServiceError as exc:
         raise HTTPException(
@@ -39,7 +41,8 @@ async def stream_answer(
         )
 
     async def event_stream() -> AsyncIterator[str]:
-        async for event in service.stream_answer(request.query):
+        stream = service.stream_answer(request.query, request.history) if request.history else service.stream_answer(request.query)
+        async for event in stream:
             yield serialize_rag_stream_event(event)
 
     return StreamingResponse(

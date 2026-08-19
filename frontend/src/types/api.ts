@@ -17,3 +17,5 @@ export type RagStreamEvent =
   | { type: 'sources'; sources: CitationSource[] }
   | { type: 'complete' }
   | { type: 'error'; message: string }
+
+export interface ConversationHistoryTurn { role: 'user' | 'assistant'; content: string }
