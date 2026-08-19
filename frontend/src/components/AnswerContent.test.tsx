@@ -44,6 +44,12 @@ describe('AnswerContent', () => {
     expect(screen.getByRole('cell', { name: 'Grounded answers' })).toBeInTheDocument()
   })
 
+  it('preserves generic three-column comparison tables', () => {
+    render(<AnswerContent answer={'| Feature | PostgreSQL | MongoDB |\n| --- | --- | --- |\n| Data model | Relational | Document |'} sources={sources} />)
+    expect(screen.getByRole('columnheader', { name: 'PostgreSQL' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Document' })).toBeInTheDocument()
+  })
+
   it('maps valid citations to source controls and leaves invalid markers as text', () => {
     render(<AnswerContent answer={'First [1], second [2], missing [7], malformed [1a].'} sources={sources} />)
     expect(screen.getByRole('button', { name: 'View source 1' })).toBeInTheDocument()
