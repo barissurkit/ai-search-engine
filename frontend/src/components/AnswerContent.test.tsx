@@ -30,6 +30,13 @@ describe('AnswerContent', () => {
     expect(screen.getByText(/partial bold/)).toBeInTheDocument()
   })
 
+  it('renders Markdown tables with semantic headers and cells', () => {
+    render(<AnswerContent answer={'| Basic idea | Why it matters |\n| --- | --- |\n| Semantic retrieval | Finds related information |'} sources={sources} />)
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Basic idea' })).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Semantic retrieval' })).toBeInTheDocument()
+  })
+
   it('maps valid citations to source controls and leaves invalid markers as text', () => {
     render(<AnswerContent answer={'First [1], second [2], missing [7], malformed [1a].'} sources={sources} />)
     expect(screen.getByRole('button', { name: 'View source 1' })).toBeInTheDocument()
