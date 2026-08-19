@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.core.config import Settings
+from app.core.http import optional_bearer_auth_headers
 
 
 class OllamaLLMProviderError(Exception):
@@ -15,16 +16,21 @@ class OllamaLLMProvider:
         self._base_url = settings.ollama_base_url.rstrip("/")
         self._model = settings.ollama_generation_model
         self._timeout = httpx.Timeout(settings.ollama_request_timeout_seconds)
+        self._headers = optional_bearer_auth_headers(settings.ollama_api_key)
         self._client = client
 
     async def generate(self, prompt: str) -> str:
         if not isinstance(prompt, str) or not prompt.strip():
             raise OllamaLLMProviderError("Prompt must not be empty.")
         try:
+            request_kwargs: dict[str, object] = {
+                "json": {"model": self._model, "prompt": prompt, "stream": False},
+                "timeout": self._timeout,
+            }
+            if self._headers is not None:
+                request_kwargs["headers"] = self._headers
             response = await self._client.post(
-                f"{self._base_url}/api/generate",
-                json={"model": self._model, "prompt": prompt, "stream": False},
-                timeout=self._timeout,
+                f"{self._base_url}/api/generate", **request_kwargs
             )
             response.raise_for_status()
             payload = response.json()
@@ -42,11 +48,14 @@ class OllamaLLMProvider:
             raise OllamaLLMProviderError("Prompt must not be empty.")
 
         try:
+            request_kwargs: dict[str, object] = {
+                "json": {"model": self._model, "prompt": prompt, "stream": True},
+                "timeout": self._timeout,
+            }
+            if self._headers is not None:
+                request_kwargs["headers"] = self._headers
             async with self._client.stream(
-                "POST",
-                f"{self._base_url}/api/generate",
-                json={"model": self._model, "prompt": prompt, "stream": True},
-                timeout=self._timeout,
+                "POST", f"{self._base_url}/api/generate", **request_kwargs
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():

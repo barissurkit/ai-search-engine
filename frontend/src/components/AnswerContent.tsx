@@ -26,6 +26,7 @@ export function AnswerContent({ answer, sources }: AnswerContentProps) {
           rehypePlugins={[[rehypeCitations, sources.length]]}
           components={{
             a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+            table: ({ children }) => <div className="markdown-table-scroll"><table>{children}</table></div>,
             sup: ({ node, children, ...props }) => {
               const number = node?.properties.dataCitation
               return typeof number === 'number' ? <CitationReference number={number} /> : <sup {...props}>{children}</sup>

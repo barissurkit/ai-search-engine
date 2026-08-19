@@ -1,6 +1,7 @@
 import httpx
 
 from app.core.config import Settings
+from app.core.http import optional_bearer_auth_headers
 
 
 class OllamaEmbeddingConfigurationError(ValueError):
@@ -21,6 +22,7 @@ class OllamaEmbeddingProvider:
         self._model = settings.ollama_embedding_model
         self._dimensions = settings.ollama_embedding_dimensions
         self._timeout = httpx.Timeout(settings.ollama_request_timeout_seconds)
+        self._headers = optional_bearer_auth_headers(settings.ollama_api_key)
         self._client = client
 
     @property
@@ -37,10 +39,14 @@ class OllamaEmbeddingProvider:
             return []
 
         try:
+            request_kwargs: dict[str, object] = {
+                "json": {"model": self._model, "input": texts},
+                "timeout": self._timeout,
+            }
+            if self._headers is not None:
+                request_kwargs["headers"] = self._headers
             response = await self._client.post(
-                f"{self._base_url}/api/embed",
-                json={"model": self._model, "input": texts},
-                timeout=self._timeout,
+                f"{self._base_url}/api/embed", **request_kwargs
             )
             response.raise_for_status()
             payload = response.json()

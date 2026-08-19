@@ -1,6 +1,6 @@
 import type { ElementContent, Root, RootContent, Text } from 'hast'
 
-const citationPattern = /\[(\d+)]/g
+const citationPattern = /(?:\[(\d+)]|【(\d+)】)/g
 
 function transformRootChildren(children: RootContent[], sourceCount: number): RootContent[] {
   const transformed: RootContent[] = []
@@ -25,7 +25,7 @@ function splitCitationText(node: Text, sourceCount: number): ElementContent[] {
   const output: ElementContent[] = []
   let lastIndex = 0
   for (const match of node.value.matchAll(citationPattern)) {
-    const number = Number(match[1])
+    const number = Number(match[1] ?? match[2])
     if (!Number.isSafeInteger(number) || number < 1 || number > sourceCount || match.index === undefined) continue
     if (match.index > lastIndex) output.push({ type: 'text', value: node.value.slice(lastIndex, match.index) })
     output.push({ type: 'element', tagName: 'sup', properties: { dataCitation: number }, children: [{ type: 'text', value: `[${number}]` }] })

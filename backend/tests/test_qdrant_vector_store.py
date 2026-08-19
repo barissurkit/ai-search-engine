@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import app.vectorstores.qdrant as qdrant_module
 from app.core.config import Settings
 from app.rag.models import DocumentChunk
 from app.vectorstores.models import ScoredDocumentChunk
@@ -28,6 +29,7 @@ class FakeQdrantClient:
         self.create_calls: list[dict[str, object]] = []
         self.upsert_calls: list[dict[str, object]] = []
         self.query_calls: list[dict[str, object]] = []
+        self.payload_index_calls: list[dict[str, object]] = []
 
     async def collection_exists(self, collection_name: str) -> bool:
         return self.exists
@@ -40,6 +42,9 @@ class FakeQdrantClient:
     async def create_collection(self, **kwargs: object) -> bool:
         self.create_calls.append(kwargs)
         return True
+
+    async def create_payload_index(self, **kwargs: object) -> None:
+        self.payload_index_calls.append(kwargs)
 
     async def upsert(self, **kwargs: object) -> None:
         self.upsert_calls.append(kwargs)
@@ -85,6 +90,72 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     config = client.create_calls[0]["vectors_config"]
     assert config.size == 3
     assert config.distance.value == "Cosine"
+    assert client.payload_index_calls == [{
+        "collection_name": "test_chunks",
+        "field_name": "retrieval_scope_id",
+        "field_schema": qdrant_module.models.PayloadSchemaType.KEYWORD,
+    }]
+
+
+def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient:
+        def __init__(self, **kwargs: object) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(_env_file=None, qdrant_url="http://localhost:6333")
+
+    QdrantVectorStore(settings, dimensions=3)
+
+    assert calls == [{"url": "http://localhost:6333"}]
+
+
+def test_client_composition_passes_api_key_for_remote_qdrant(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient:
+        def __init__(self, **kwargs: object) -> None:
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(
+        _env_file=None,
+        qdrant_url="https://qdrant.test",
+        qdrant_api_key="qdrant-test-secret",
+    )
+
+    QdrantVectorStore(settings, dimensions=3)
+
+    assert calls == [{"url": "https://qdrant.test", "api_key": "qdrant-test-secret"}]
+
+
+def test_cloud_inference_composition_and_document_paths_preserve_text_and_scope(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class CapturingClient(FakeQdrantClient):
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__()
+            calls.append(kwargs)
+
+    monkeypatch.setattr(qdrant_module, "AsyncQdrantClient", CapturingClient)
+    settings = Settings(_env_file=None, qdrant_url="https://qdrant.test", qdrant_api_key="key", qdrant_cloud_inference_enabled=True, qdrant_inference_model="intfloat/multilingual-e5-small", qdrant_inference_dimensions=384)
+    store = QdrantVectorStore(settings, dimensions=settings.qdrant_inference_dimensions)
+    client = store._client
+
+    asyncio.run(store.upsert_with_inference([chunk()], "scope-one"))
+    asyncio.run(store.search_with_inference("question text", 7, "scope-one"))
+
+    assert calls == [{"url": "https://qdrant.test", "api_key": "key", "cloud_inference": True}]
+    point = client.upsert_calls[0]["points"][0]
+    assert point.vector.text == "A useful document chunk."
+    assert point.vector.model == "intfloat/multilingual-e5-small"
+    assert point.payload["retrieval_scope_id"] == "scope-one"
+    query = client.query_calls[0]["query"]
+    assert query.text == "question text"
+    assert query.model == "intfloat/multilingual-e5-small"
+    assert client.query_calls[0]["limit"] == 7
 
 
 def test_initialize_keeps_an_existing_compatible_collection():

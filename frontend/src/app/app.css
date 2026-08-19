@@ -45,6 +45,12 @@ h1 { color: var(--foreground); font-size: clamp(2.5rem, 5.2vw, 4.25rem); letter-
 .answer-content code { background: #eef1f5; border-radius: 0.3rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.87em; padding: 0.12em 0.3em; }
 .answer-content pre { background: #192235; border-radius: 0.75rem; color: #eef3fa; margin: 1.25rem 0; overflow-x: auto; padding: 1rem; }.answer-content pre code { background: transparent; color: inherit; padding: 0; }
 .answer-content blockquote { border-left: 3px solid var(--border-strong); color: var(--muted); margin-left: 0; padding-left: 1rem; }
+.markdown-table-scroll { margin: 1.25rem 0; max-width: 100%; width: 100%; }
+.markdown-table-scroll table { border-collapse: collapse; max-width: 100%; min-width: 0; table-layout: fixed; width: 100%; }
+.markdown-table-scroll th, .markdown-table-scroll td { border-bottom: 1px solid var(--border); box-sizing: border-box; min-width: 0; overflow-wrap: break-word; padding: 0.65rem 0.8rem; text-align: left; vertical-align: top; white-space: normal; word-break: normal; }
+.markdown-table-scroll th { color: var(--foreground); font-weight: 650; }
+.markdown-table-scroll th:first-child, .markdown-table-scroll td:first-child { width: 28%; }
+@media (max-width: 34rem) { .markdown-table-scroll { overflow-x: auto; overscroll-behavior-inline: contain; } .markdown-table-scroll table { min-width: 34rem; table-layout: auto; } .markdown-table-scroll th:first-child, .markdown-table-scroll td:first-child { min-width: 10rem; width: auto; } }
 .citation-reference { background: #edf1f6; border: 1px solid #d9e0e9; border-radius: 999px; color: var(--accent); cursor: pointer; font: inherit; font-size: 0.72em; font-weight: 700; line-height: 1; margin: 0 0.12em; padding: 0.2em 0.36em; vertical-align: super; }
 .research-note { color: var(--muted); font-size: 0.92rem; margin: 1rem 0; }
 .research-error { background: #fff4f3; border: 1px solid #efc7c1; border-radius: 0.75rem; color: #8d3025; margin: 1.25rem 0; padding: 0.8rem 1rem; }
