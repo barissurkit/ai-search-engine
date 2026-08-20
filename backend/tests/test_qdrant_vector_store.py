@@ -6,6 +6,7 @@ import pytest
 import app.vectorstores.qdrant as qdrant_module
 from app.core.config import Settings
 from app.rag.models import DocumentChunk
+from app.retrieval.service import RetrievalService
 from app.vectorstores.models import ScoredDocumentChunk
 from app.vectorstores.provider import VectorStore
 from app.vectorstores.qdrant import (
@@ -134,6 +135,42 @@ def test_initialize_failure_releases_lock_for_a_later_retry():
     assert attempts == 2
     assert len(client.create_calls) == 1
     assert len(client.payload_index_calls) == 1
+
+
+def test_cloud_inference_file_lifecycle_uses_a_scoped_filter_and_is_retry_safe():
+    client = FakeQdrantClient()
+    settings = Settings(
+        _env_file=None,
+        qdrant_collection_name="test_chunks",
+        qdrant_cloud_inference_enabled=True,
+        qdrant_inference_model="intfloat/multilingual-e5-small",
+        qdrant_inference_dimensions=384,
+    )
+    store = QdrantVectorStore(settings, dimensions=384, client=client)
+    retrieval = RetrievalService(None, store)
+    file_chunk = chunk().model_copy(update={
+        "source_type": "file", "conversation_id": "conversation-a", "document_id": "document-a", "filename": "report.pdf", "page_number": 1,
+    })
+
+    async def exercise_lifecycle() -> None:
+        await retrieval.index([file_chunk], "file:conversation-a:document-a")
+        await retrieval.delete_files("conversation-a")
+        await retrieval.delete_files("conversation-a")
+
+    asyncio.run(exercise_lifecycle())
+
+    point = client.upsert_calls[0]["points"][0]
+    assert point.vector.text == "A useful document chunk."
+    assert point.vector.model == "intfloat/multilingual-e5-small"
+    assert point.payload["source_type"] == "file"
+    assert point.payload["conversation_id"] == "conversation-a"
+    assert point.payload["document_id"] == "document-a"
+    for call in client.delete_calls:
+        conditions = call["points_selector"].filter.must
+        assert [(condition.key, condition.match.value) for condition in conditions] == [
+            ("source_type", "file"),
+            ("conversation_id", "conversation-a"),
+        ]
 
 
 def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
