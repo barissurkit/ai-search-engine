@@ -14,7 +14,7 @@ function latestCall(): StreamCall {
 }
 function emit(event: RagStreamEvent) { act(() => { latestCall().onEvent(event) }) }
 
-afterEach(() => { cleanup(); streamAnswerMock.mockReset() })
+afterEach(() => { cleanup(); streamAnswerMock.mockReset(); history.replaceState({}, '', '/') })
 
 describe('App', () => {
   it('renders the brand, hero, and accessible composer', () => {
@@ -159,4 +159,5 @@ describe('App', () => {
     expect(screen.queryByText('This must not appear.')).not.toBeInTheDocument()
     expect(streamAnswerMock).toHaveBeenCalledTimes(1)
   })
+
 })
