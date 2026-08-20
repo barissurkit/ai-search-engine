@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RagStreamEvent } from './types/api'
 
@@ -14,7 +14,7 @@ function latestCall(): StreamCall {
 }
 function emit(event: RagStreamEvent) { act(() => { latestCall().onEvent(event) }) }
 
-afterEach(() => { cleanup(); streamAnswerMock.mockReset(); history.replaceState({}, '', '/') })
+afterEach(() => { cleanup(); streamAnswerMock.mockReset(); vi.unstubAllGlobals(); history.replaceState({}, '', '/') })
 
 describe('App', () => {
   it('renders the brand, hero, and accessible composer', () => {
@@ -72,7 +72,7 @@ describe('App', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Sources' } })
     fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
     emit({ type: 'sources', sources: [{ citation_number: 1, title: 'Example source', url: 'https://example.com/article' }] })
-    expect(screen.getByRole('link', { name: 'Example source' })).toHaveAttribute('href', 'https://example.com/article')
+    expect(screen.getAllByRole('link', { name: 'Example source' })[0]).toHaveAttribute('href', 'https://example.com/article')
   })
 
   it('shows a safe stream error without treating it as success', () => {
@@ -158,6 +158,25 @@ describe('App', () => {
     act(() => { oldCall.onEvent({ type: 'delta', text: 'This must not appear.' }) })
     expect(screen.queryByText('This must not appear.')).not.toBeInTheDocument()
     expect(streamAnswerMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens the narrow Sources drawer from a citation and supports close, reopen, and Escape', () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
+    streamAnswerMock.mockResolvedValue(undefined)
+    render(<App />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search the web' }), { target: { value: 'Mobile sources' } })
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Search the web' }).closest('form')!)
+    emit({ type: 'delta', text: 'See [1].' })
+    emit({ type: 'sources', sources: [{ citation_number: 1, title: 'Mobile web', url: 'https://example.com/mobile' }] })
+    expect(screen.queryByLabelText('Sources panel')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'View source 1' }))
+    const panel = screen.getByLabelText('Sources panel')
+    expect(panel).toBeInTheDocument()
+    expect(within(panel).getByText('Mobile web').closest('article')).toHaveClass('selected')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close sources' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open sources' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByLabelText('Sources panel')).not.toBeInTheDocument()
   })
 
 })
