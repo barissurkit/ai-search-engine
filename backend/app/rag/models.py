@@ -11,7 +11,7 @@ class DocumentChunk(BaseModel):
     final_url: str
     index: int
     title: str | None = None
-    source_type: Literal["file"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    source_type: Literal["web", "file"] = Field(default="web", exclude_if=lambda value: value == "web")
     conversation_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     document_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     filename: str | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -24,7 +24,7 @@ class CitationSource(BaseModel):
     citation_number: int
     url: str
     title: str | None = None
-    source_type: Literal["file"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    source_type: Literal["web", "file"] = Field(default="web", exclude_if=lambda value: value == "web")
     document_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     filename: str | None = Field(default=None, exclude_if=lambda value: value is None)
     page_number: int | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -43,6 +43,7 @@ class RAGPrompt(BaseModel):
 
     prompt: str
     sources: list[CitationSource]
+    retrieval_scope_id: str | None = None
 
 
 class RAGStreamProgress(BaseModel):

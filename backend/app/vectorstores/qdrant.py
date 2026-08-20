@@ -282,6 +282,13 @@ class QdrantVectorStore:
         except Exception as exc:
             raise VectorStoreError("Qdrant file deletion failed.") from exc
 
+    async def delete_scope(self, scope_id: str) -> None:
+        self._validate_scope_id(scope_id)
+        try:
+            await self._client.delete(collection_name=self._collection_name, points_selector=models.FilterSelector(filter=models.Filter(must=[models.FieldCondition(key="retrieval_scope_id", match=models.MatchValue(value=scope_id))])))
+        except Exception as exc:
+            raise VectorStoreError("Qdrant retrieval scope deletion failed.") from exc
+
     @staticmethod
     def _collection_dimensions(collection: object) -> int:
         vectors = getattr(
@@ -325,7 +332,7 @@ class QdrantVectorStore:
                 final_url=payload["final_url"],
                 title=payload.get("title"),
                 index=payload["chunk_index"],
-                source_type=payload.get("source_type"), conversation_id=payload.get("conversation_id"), document_id=payload.get("document_id"), filename=payload.get("filename"), page_number=payload.get("page_number"),
+                source_type=payload.get("source_type", "web"), conversation_id=payload.get("conversation_id"), document_id=payload.get("document_id"), filename=payload.get("filename"), page_number=payload.get("page_number"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise VectorStoreError("Qdrant similarity search response was invalid.") from exc

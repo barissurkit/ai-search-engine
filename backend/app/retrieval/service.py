@@ -122,6 +122,13 @@ class RetrievalService:
         except Exception as exc:
             raise RetrievalServiceError("Document cleanup failed.") from exc
 
+    async def delete_scope(self, scope_id: str) -> None:
+        await self._ensure_collection()
+        try:
+            await self._vector_store.delete_scope(scope_id)
+        except Exception as exc:
+            raise RetrievalServiceError("Web retrieval cleanup failed.") from exc
+
     async def retrieve_file_chunks(self, query: str, conversation_id: str, document_ids: list[str], top_k: int | None = None) -> list[ScoredDocumentChunk]:
         if not query.strip() or not conversation_id.strip() or not document_ids:
             raise RetrievalServiceError("File retrieval requires a query, conversation, and selected documents.")

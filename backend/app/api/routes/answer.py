@@ -19,9 +19,9 @@ async def answer(
     service: Annotated[RAGService, Depends(get_rag_service)],
 ) -> RAGAnswer:
     try:
-        if request.history:
-            return await service.answer(request.query, request.history)
-        return await service.answer(request.query)
+        if request.source_mode == "web" and not request.history:
+            return await service.answer(request.query)
+        return await service.answer(request.query, request.history, request.source_mode, request.conversation_id, request.document_ids)
     except RAGServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -41,7 +41,7 @@ async def stream_answer(
         )
 
     async def event_stream() -> AsyncIterator[str]:
-        stream = service.stream_answer(request.query, request.history) if request.history else service.stream_answer(request.query)
+        stream = service.stream_answer(request.query) if request.source_mode == "web" and not request.history else service.stream_answer(request.query, request.history, request.source_mode, request.conversation_id, request.document_ids)
         async for event in stream:
             yield serialize_rag_stream_event(event)
 

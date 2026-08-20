@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from typing import Literal
+from uuid import uuid4
 
 from app.llm.provider import LLMProvider, StreamingLLMProvider
 from app.rag.chunking import DocumentChunker
@@ -49,9 +50,12 @@ class RAGService:
         self._llm_provider = llm_provider
         self._retrieval_top_k = retrieval_top_k
 
-    async def answer(self, query: str, history: list[ConversationTurn] | None = None) -> RAGAnswer:
-        prompt = await self._prepare_prompt(query, history)
-        generated_answer = await self._generate(prompt.prompt)
+    async def answer(self, query: str, history: list[ConversationTurn] | None = None, source_mode: str = "web", conversation_id: str | None = None, document_ids: list[str] | None = None) -> RAGAnswer:
+        prompt = await self._prepare_prompt(query, history, source_mode, conversation_id, document_ids)
+        try:
+            generated_answer = await self._generate(prompt.prompt)
+        finally:
+            await self._cleanup_scope(prompt.retrieval_scope_id)
 
         return RAGAnswer(
             query=query,
@@ -74,10 +78,11 @@ class RAGService:
     def supports_streaming(self) -> bool:
         return isinstance(self._llm_provider, StreamingLLMProvider)
 
-    async def stream_answer(self, query: str, history: list[ConversationTurn] | None = None) -> AsyncIterator[RAGStreamEvent]:
+    async def stream_answer(self, query: str, history: list[ConversationTurn] | None = None, source_mode: str = "web", conversation_id: str | None = None, document_ids: list[str] | None = None) -> AsyncIterator[RAGStreamEvent]:
         """Run the normal RAG pipeline while exposing provider-independent events."""
+        prompt: RAGPrompt | None = None
         try:
-            async for stage, prompt in self._prepare_prompt_stages(query, history):
+            async for stage, prompt in self._prepare_prompt_stages(query, history, source_mode, conversation_id, document_ids):
                 yield RAGStreamProgress(stage=stage)
 
             assert prompt is not None
@@ -91,36 +96,56 @@ class RAGService:
         except Exception:  # noqa: BLE001 - provider implementations are intentionally opaque
             yield RAGStreamError(message="RAG answer is unavailable.")
             return
+        finally:
+            if prompt is not None:
+                await self._cleanup_scope(prompt.retrieval_scope_id)
 
         yield RAGStreamSources(sources=prompt.sources)
         yield RAGStreamComplete()
 
-    async def _prepare_prompt(self, query: str, history: list[ConversationTurn] | None = None) -> RAGPrompt:
+    async def _prepare_prompt(self, query: str, history: list[ConversationTurn] | None = None, source_mode: str = "web", conversation_id: str | None = None, document_ids: list[str] | None = None) -> RAGPrompt:
         prompt: RAGPrompt | None = None
-        async for _, prompt in self._prepare_prompt_stages(query, history):
+        async for _, prompt in self._prepare_prompt_stages(query, history, source_mode, conversation_id, document_ids):
             pass
         assert prompt is not None
         return prompt
 
     async def _prepare_prompt_stages(
-        self, query: str, history: list[ConversationTurn] | None = None
+        self, query: str, history: list[ConversationTurn] | None = None, source_mode: str = "web", conversation_id: str | None = None, document_ids: list[str] | None = None
     ) -> AsyncIterator[tuple[Literal["searching", "ingesting", "retrieving", "generating"], RAGPrompt | None]]:
         if not isinstance(query, str) or not query.strip():
             raise RAGServiceError("RAG query must not be empty.")
 
         bounded_history = bound_history(history)
         search_query = compose_search_query(query, bounded_history)
-        yield "searching", None
-        search_results = await self._search(search_query)
-        yield "ingesting", None
-        documents = await self._ingest(search_results)
-        chunks = self._chunk_documents(documents)
-        yield "retrieving", None
-        scope_id = str(uuid4())
-        await self._index(chunks, scope_id)
-        retrieved_chunks = await self._retrieve(search_query, scope_id)
+        retrieved_chunks = []
+        scope_id: str | None = None
+        if source_mode in {"web", "hybrid"}:
+            yield "searching", None
+            search_results = await self._search(search_query)
+            yield "ingesting", None
+            chunks = self._chunk_documents(await self._ingest(search_results))
+            yield "retrieving", None
+            scope_id = str(uuid4()); await self._index(chunks, scope_id)
+            retrieved_chunks.extend(await self._retrieve(search_query, scope_id))
+        if source_mode in {"files", "hybrid"}:
+            if not conversation_id or not document_ids:
+                raise RAGServiceError("File source modes require a conversation and documents.")
+            yield "retrieving", None
+            retrieved_chunks.extend(await self._retrieval_service.retrieve_file_chunks(search_query, conversation_id, document_ids, self._retrieval_top_k))
+        if not retrieved_chunks:
+            raise RAGServiceError("RAG retrieval returned no context.")
         prompt = self._build_prompt(query, retrieved_chunks, bounded_history)
+        prompt.retrieval_scope_id = scope_id
         yield "generating", prompt
+
+    async def _cleanup_scope(self, scope_id: str | None) -> None:
+        if not scope_id:
+            return
+        try:
+            await self._retrieval_service.delete_scope(scope_id)
+        except Exception:  # noqa: BLE001 - cleanup must not mask the primary answer
+            return
 
     async def _search(self, query: str):
         try:
@@ -185,4 +210,3 @@ class RAGService:
             return await self._llm_provider.generate(prompt)
         except Exception as exc:
             raise RAGServiceError("RAG answer generation failed.") from exc
-from uuid import uuid4
