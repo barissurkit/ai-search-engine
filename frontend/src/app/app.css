@@ -147,3 +147,38 @@ h1 { font-size: clamp(2.25rem, 4.5vw, 3.75rem); }
 }
 
 @media (min-width: 761px) and (max-width: 960px) { .app-shell.sources-open .followup-composer { right: 17rem; } }
+
+/* Sidebar settings and stable workspace composition */
+.conversation-sidebar { display: flex; flex-direction: column; min-height: 100vh; padding-bottom: var(--space-3); }
+.sidebar-new, .sidebar-toggle, .theme-trigger { min-height: 2.75rem; }
+.sidebar-new { align-items: center; display: flex; font-weight: 600; justify-content: flex-start; line-height: 1; }
+.conversation-sidebar.collapsed .sidebar-new { font-size: 1.55rem; justify-content: center; margin: var(--space-3) 0; padding: 0; }
+.sidebar-toggle { align-items: center; border-radius: var(--radius-md); display: inline-flex; justify-content: center; line-height: 1; width: 2.75rem; }
+.sidebar-toggle:hover { background: var(--color-surface-subtle); }
+.sidebar-footer { margin-top: auto; padding-top: var(--space-4); }
+.theme-control { bottom: auto; left: auto; position: relative; width: 100%; }
+.theme-trigger { border-color: transparent; border-radius: var(--radius-md); font-size: .85rem; justify-content: flex-start; padding: .45rem .55rem; }
+.theme-trigger svg { fill: none; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.1rem; }
+.theme-menu { bottom: calc(100% + .6rem); left: 0; min-width: min(16rem, calc(100vw - 2rem)); padding: .55rem; }
+.settings-heading { color: var(--foreground); font-size: .82rem; font-weight: 700; margin: .15rem .3rem .55rem; }
+.settings-label { color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .06em; margin: 0 .3rem .25rem; text-transform: uppercase; }
+.conversation-sidebar.collapsed .settings-trigger-label, .conversation-sidebar.collapsed .theme-chevron { display: none; }
+.conversation-sidebar.collapsed .theme-trigger { justify-content: center; padding: .45rem; width: 2.75rem; }
+.conversation-sidebar.collapsed .theme-menu { left: 0; }
+
+.conversation-workspace { align-items: stretch; }
+.conversation-main { display: flex; flex-direction: column; min-height: 100vh; }
+.conversation-page { flex: 1 0 auto; padding-bottom: 13rem; }
+.followup-composer { background: linear-gradient(transparent, var(--color-bg) 28%); bottom: 0; left: auto; margin-top: auto; padding: 1.25rem var(--page-gutter) calc(1.25rem + env(safe-area-inset-bottom)); position: sticky; right: auto; width: 100%; z-index: 10; }
+.conversation-sidebar.collapsed + .app-shell .followup-composer, .app-shell.sources-open .followup-composer { left: auto; right: auto; }
+.sources-panel { align-self: stretch; height: 100vh; min-height: 0; overflow-y: auto; position: sticky; top: 0; }
+.sources-empty { line-height: 1.55; margin: 2rem 0; max-width: 17rem; }
+
+@media (max-width: 760px) {
+  .conversation-sidebar { min-height: 100vh; }
+  .conversation-sidebar.collapsed .sidebar-new { margin-block: var(--space-3); }
+  .conversation-page { padding-bottom: 12rem; }
+  .followup-composer { padding: var(--space-2) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom)); }
+  .sources-panel { height: auto; position: fixed; }
+  .theme-menu { left: 0; right: auto; }
+}

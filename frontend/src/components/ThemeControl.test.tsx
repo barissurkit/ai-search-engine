@@ -9,9 +9,9 @@ describe('ThemeControl', () => {
     const onChange = vi.fn()
     render(<ThemeControl preference="system" onChange={onChange} />)
 
-    const trigger = screen.getByRole('button', { name: 'Theme: System' })
+    const trigger = screen.getByRole('button', { name: 'Settings. Theme: System' })
     fireEvent.click(trigger)
-    expect(screen.getByRole('menu', { name: 'Theme preference' })).toBeInTheDocument()
+    expect(screen.getByRole('menu', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true')
 
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }))
