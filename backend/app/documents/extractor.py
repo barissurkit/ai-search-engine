@@ -17,12 +17,18 @@ def extract_document(filename: str, content: bytes, max_characters: int = 500_00
     if extension == ".pdf":
         if not content.startswith(b"%PDF"):
             raise DocumentExtractionError("The PDF file is invalid.")
-        reader = PdfReader(BytesIO(content))
+        try:
+            reader = PdfReader(BytesIO(content))
+        except Exception as exc:
+            raise DocumentExtractionError("The PDF file is invalid.") from exc
         if len(reader.pages) > max_pdf_pages:
             raise DocumentExtractionError("PDF has too many pages.")
         pages = [(index + 1, page.extract_text() or "") for index, page in enumerate(reader.pages)]
     elif extension == ".docx":
-        document = DocxDocument(BytesIO(content))
+        try:
+            document = DocxDocument(BytesIO(content))
+        except Exception as exc:
+            raise DocumentExtractionError("The DOCX file is invalid.") from exc
         values = [paragraph.text for paragraph in document.paragraphs]
         values.extend(cell.text for table in document.tables for row in table.rows for cell in row.cells)
         pages = [(None, "\n".join(values))]

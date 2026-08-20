@@ -101,6 +101,19 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     }]
 
 
+def test_initialize_is_safe_when_called_concurrently():
+    client = FakeQdrantClient()
+    store = create_store(client)
+
+    async def initialize_twice() -> None:
+        await asyncio.gather(store.initialize_collection(), store.initialize_collection())
+
+    asyncio.run(initialize_twice())
+
+    assert len(client.create_calls) == 1
+    assert len(client.payload_index_calls) == 1
+
+
 def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
     calls: list[dict[str, object]] = []
 
