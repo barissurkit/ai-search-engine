@@ -55,6 +55,13 @@ class AsyncQdrantClientProtocol(Protocol):
 
 
 class QdrantVectorStore:
+    _FILTER_PAYLOAD_FIELDS = (
+        "retrieval_scope_id",
+        "source_type",
+        "conversation_id",
+        "document_id",
+    )
+
     def __init__(
         self,
         settings: Settings,
@@ -132,11 +139,12 @@ class QdrantVectorStore:
                     "Qdrant collection vector dimension does not match expected dimension."
                 )
         try:
-            await self._client.create_payload_index(
-                collection_name=self._collection_name,
-                field_name="retrieval_scope_id",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
+            for field_name in self._FILTER_PAYLOAD_FIELDS:
+                await self._client.create_payload_index(
+                    collection_name=self._collection_name,
+                    field_name=field_name,
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
         except Exception as exc:
             raise VectorStoreError("Qdrant collection initialization failed.") from exc
 
