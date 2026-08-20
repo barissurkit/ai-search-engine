@@ -27,7 +27,7 @@ Ask a question, continue the conversation, attach documents when needed, and ins
 
 ## Product Preview
 
-`CURRENT V2 SCREENSHOT REQUIRED` — the repository's existing image predates the final v2 workspace and is intentionally not shown here. A final desktop screenshot should show the sidebar, answer citations, and Sources workspace without private or synthetic data.
+![AI Search v2 research workspace with conversation history, citations, and Sources panel](docs/images/ai-search-workspace-v2.png)
 
 ## Architecture
 
