@@ -2,6 +2,10 @@ export interface CitationSource {
   citation_number: number
   url: string
   title: string | null
+  source_type?: 'web' | 'file'
+  document_id?: string | null
+  filename?: string | null
+  page_number?: number | null
 }
 
 export interface RagAnswer {

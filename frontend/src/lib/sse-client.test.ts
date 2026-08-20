@@ -27,8 +27,21 @@ describe('SSE parsing', () => {
   })
   it('passes AbortSignal to streaming requests', async () => {
     const controller = new AbortController()
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(streamFrom([])))
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(streamFrom([])))
     await streamAnswer('q', { signal: controller.signal, fetchImpl, onEvent: () => undefined })
     expect(fetchImpl.mock.calls[0]?.[1]?.signal).toBe(controller.signal)
+  })
+  it('serializes web, files, and hybrid scopes without leaking file fields into web requests', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => new Response(streamFrom([])))
+    await streamAnswer('web query', { fetchImpl, onEvent: () => undefined })
+    await streamAnswer('file query', { fetchImpl, onEvent: () => undefined, sourceMode: 'files', conversationId: 'conversation-b', documentIds: ['ready-b'] })
+    await streamAnswer('hybrid query', { fetchImpl, onEvent: () => undefined, sourceMode: 'hybrid', conversationId: 'conversation-b', documentIds: ['ready-b'] })
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({ query: 'web query', source_mode: 'web' })
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({ query: 'file query', source_mode: 'files', conversation_id: 'conversation-b', document_ids: ['ready-b'] })
+    expect(JSON.parse(String(fetchImpl.mock.calls[2]?.[1]?.body))).toEqual({ query: 'hybrid query', source_mode: 'hybrid', conversation_id: 'conversation-b', document_ids: ['ready-b'] })
+  })
+  it('maps URL-less file source events while preserving document metadata', () => {
+    expect(parseSseEvent('event: sources\ndata: {"sources":[{"citation_number":1,"source_type":"file","document_id":"doc-1","filename":"report.pdf","page_number":2}]}')).toEqual({ type: 'sources', sources: [{ citation_number: 1, url: '', title: null, source_type: 'file', document_id: 'doc-1', filename: 'report.pdf', page_number: 2 }] })
   })
 })

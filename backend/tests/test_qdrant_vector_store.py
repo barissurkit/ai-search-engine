@@ -30,6 +30,7 @@ class FakeQdrantClient:
         self.upsert_calls: list[dict[str, object]] = []
         self.query_calls: list[dict[str, object]] = []
         self.payload_index_calls: list[dict[str, object]] = []
+        self.delete_calls: list[dict[str, object]] = []
 
     async def collection_exists(self, collection_name: str) -> bool:
         return self.exists
@@ -52,6 +53,9 @@ class FakeQdrantClient:
     async def query_points(self, **kwargs: object) -> object:
         self.query_calls.append(kwargs)
         return self.query_response
+
+    async def delete(self, **kwargs: object) -> None:
+        self.delete_calls.append(kwargs)
 
 
 def collection_with_dimensions(dimensions: int) -> object:
@@ -297,3 +301,33 @@ def test_client_error_becomes_safe_store_error():
         asyncio.run(create_store(client).initialize_collection())
 
     assert "qdrant-secret" not in str(exc_info.value)
+
+
+def test_file_search_builds_conversation_document_and_file_type_filter():
+    client = FakeQdrantClient()
+    asyncio.run(create_store(client).search_files([0.1, 0.2, 0.3], 5, "conversation-b", ["document-b"]))
+    conditions = client.query_calls[0]["query_filter"].must
+    assert [(condition.key, getattr(condition.match, "value", None)) for condition in conditions[:2]] == [("source_type", "file"), ("conversation_id", "conversation-b")]
+    assert conditions[2].key == "document_id"
+    assert conditions[2].match.any == ["document-b"]
+
+
+def test_file_search_rejects_empty_selected_documents():
+    with pytest.raises(VectorStoreError, match="selected documents"):
+        asyncio.run(create_store(FakeQdrantClient()).search_files([0.1, 0.2, 0.3], 5, "conversation", []))
+
+
+def test_file_search_maps_file_metadata_without_fake_page_numbers():
+    payload = {"content": "Evidence", "source_url": "file://doc", "final_url": "file://doc", "title": "report.pdf", "chunk_index": 0, "source_type": "file", "conversation_id": "conversation", "document_id": "doc", "filename": "report.pdf", "page_number": 5}
+    client = FakeQdrantClient(query_response=SimpleNamespace(points=[SimpleNamespace(score=0.9, payload=payload)]))
+    result = asyncio.run(create_store(client).search_files([0.1, 0.2, 0.3], 1, "conversation", ["doc"]))[0]
+    assert (result.chunk.filename, result.chunk.page_number, result.chunk.document_id) == ("report.pdf", 5, "doc")
+
+
+def test_file_deletion_filters_are_scoped_to_file_conversation_and_document():
+    client = FakeQdrantClient(); store = create_store(client)
+    asyncio.run(store.delete_files("conversation-a", "document-a"))
+    conditions = client.delete_calls[0]["points_selector"].filter.must
+    assert [(item.key, item.match.value) for item in conditions] == [("source_type", "file"), ("conversation_id", "conversation-a"), ("document_id", "document-a")]
+    asyncio.run(store.delete_files("conversation-a"))
+    assert len(client.delete_calls[1]["points_selector"].filter.must) == 2

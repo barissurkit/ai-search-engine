@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     web_fetch_timeout_seconds: float = 10.0
     web_fetch_user_agent: str = "AI-Search-Engine/0.1"
     web_ingestion_max_concurrency: int = 3
+    document_max_upload_bytes: int = Field(default=10_000_000, ge=1)
+    document_max_extracted_characters: int = Field(default=500_000, ge=1)
+    document_max_pdf_pages: int = Field(default=100, ge=1)
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

@@ -24,14 +24,19 @@ class RAGPromptBuilder:
             if not chunk.content.strip():
                 raise RAGPromptError("Retrieved chunk content must not be empty.")
 
-            source = sources_by_url.get(chunk.final_url)
+            identity = chunk.document_id or chunk.final_url
+            source = sources_by_url.get(identity)
             if source is None:
                 source = CitationSource(
                     citation_number=len(sources_by_url) + 1,
                     url=chunk.final_url,
                     title=chunk.title,
+                    source_type=chunk.source_type,
+                    document_id=chunk.document_id,
+                    filename=chunk.filename,
+                    page_number=chunk.page_number,
                 )
-                sources_by_url[chunk.final_url] = source
+                sources_by_url[identity] = source
 
             context_sections.append(self._format_chunk(source, chunk.content))
 

@@ -4,18 +4,19 @@ import remarkGfm from 'remark-gfm'
 import type { CitationSource } from '../types/api'
 import { rehypeCitations } from '../lib/citations'
 
-interface AnswerContentProps { answer: string; sources: CitationSource[] }
+interface AnswerContentProps { answer: string; sources: CitationSource[]; onCitationSelect?: (number: number) => void }
 
-function CitationReference({ number }: { number: number }) {
+function CitationReference({ number, onSelect }: { number: number; onSelect?: (number: number) => void }) {
   const goToSource = () => {
+    onSelect?.(number)
     const card = document.getElementById(`source-${number}`)
-    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    if (typeof card?.scrollIntoView === 'function') card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     card?.focus({ preventScroll: true })
   }
   return <button className="citation-reference" type="button" aria-label={`View source ${number}`} onClick={goToSource}>[{number}]</button>
 }
 
-export function AnswerContent({ answer, sources }: AnswerContentProps) {
+export function AnswerContent({ answer, sources, onCitationSelect }: AnswerContentProps) {
   if (!answer) return null
   return (
     <section className="answer-section" aria-labelledby="answer-title">
@@ -29,7 +30,7 @@ export function AnswerContent({ answer, sources }: AnswerContentProps) {
             table: ({ children }) => <div className="markdown-table-scroll"><table>{children}</table></div>,
             sup: ({ node, children, ...props }) => {
               const number = node?.properties.dataCitation
-              return typeof number === 'number' ? <CitationReference number={number} /> : <sup {...props}>{children}</sup>
+              return typeof number === 'number' ? <CitationReference number={number} onSelect={onCitationSelect} /> : <sup {...props}>{children}</sup>
             },
           }}
         >

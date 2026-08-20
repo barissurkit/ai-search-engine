@@ -50,6 +50,8 @@ class AsyncQdrantClientProtocol(Protocol):
         query_filter: models.Filter,
     ) -> object: ...
 
+    async def delete(self, *, collection_name: str, points_selector: object) -> object: ...
+
 
 class QdrantVectorStore:
     def __init__(
@@ -146,14 +148,7 @@ class QdrantVectorStore:
             models.PointStruct(
                 id=self._point_id(chunk, scope_id),
                 vector=vector,
-                payload={
-                    "content": chunk.content,
-                    "source_url": chunk.source_url,
-                    "final_url": chunk.final_url,
-                    "title": chunk.title,
-                    "chunk_index": chunk.index,
-                    "retrieval_scope_id": scope_id,
-                },
+                payload=self._payload(chunk, scope_id),
             )
             for chunk, vector in zip(chunks, vectors, strict=True)
         ]
@@ -228,6 +223,28 @@ class QdrantVectorStore:
         self._validate_scope_id(scope_id)
         return await self._search(models.Document(text=query, model=self._inference_model), limit, scope_id)
 
+    async def search_files(self, query_vector: list[float], limit: int, conversation_id: str, document_ids: list[str]) -> list[ScoredDocumentChunk]:
+        self._validate_vector(query_vector)
+        return await self._search_files(query_vector, limit, conversation_id, document_ids)
+
+    async def search_files_with_inference(self, query: str, limit: int, conversation_id: str, document_ids: list[str]) -> list[ScoredDocumentChunk]:
+        if not self._uses_cloud_inference:
+            raise VectorStoreConfigurationError("Qdrant cloud inference is not enabled.")
+        return await self._search_files(models.Document(text=query, model=self._inference_model), limit, conversation_id, document_ids)
+
+    async def _search_files(self, query: list[float] | models.Document, limit: int, conversation_id: str, document_ids: list[str]) -> list[ScoredDocumentChunk]:
+        if not conversation_id.strip() or not document_ids:
+            raise VectorStoreError("File retrieval requires a conversation and selected documents.")
+        query_filter = models.Filter(must=[models.FieldCondition(key="source_type", match=models.MatchValue(value="file")), models.FieldCondition(key="conversation_id", match=models.MatchValue(value=conversation_id)), models.FieldCondition(key="document_id", match=models.MatchAny(any=document_ids))])
+        try:
+            response = await self._client.query_points(collection_name=self._collection_name, query=query, limit=limit, with_payload=True, with_vectors=False, query_filter=query_filter)
+        except Exception as exc:
+            raise VectorStoreError("Qdrant file similarity search failed.") from exc
+        points = getattr(response, "points", None)
+        if not isinstance(points, list):
+            raise VectorStoreError("Qdrant similarity search response was invalid.")
+        return [self._to_scored_chunk(point) for point in points]
+
     async def _search(self, query: list[float] | models.Document, limit: int, scope_id: str) -> list[ScoredDocumentChunk]:
         try:
             response = await self._client.query_points(collection_name=self._collection_name, query=query, limit=limit, with_payload=True, with_vectors=False, query_filter=models.Filter(must=[models.FieldCondition(key="retrieval_scope_id", match=models.MatchValue(value=scope_id))]))
@@ -251,7 +268,26 @@ class QdrantVectorStore:
 
     @staticmethod
     def _payload(chunk: DocumentChunk, scope_id: str) -> dict[str, object]:
-        return {"content": chunk.content, "source_url": chunk.source_url, "final_url": chunk.final_url, "title": chunk.title, "chunk_index": chunk.index, "retrieval_scope_id": scope_id}
+        payload = {"content": chunk.content, "source_url": chunk.source_url, "final_url": chunk.final_url, "title": chunk.title, "chunk_index": chunk.index, "retrieval_scope_id": scope_id}
+        if chunk.source_type == "file":
+            payload.update({"source_type": "file", "conversation_id": chunk.conversation_id, "document_id": chunk.document_id, "filename": chunk.filename, "page_number": chunk.page_number})
+        return payload
+
+    async def delete_files(self, conversation_id: str, document_id: str | None = None) -> None:
+        conditions = [models.FieldCondition(key="source_type", match=models.MatchValue(value="file")), models.FieldCondition(key="conversation_id", match=models.MatchValue(value=conversation_id))]
+        if document_id:
+            conditions.append(models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id)))
+        try:
+            await self._client.delete(collection_name=self._collection_name, points_selector=models.FilterSelector(filter=models.Filter(must=conditions)))
+        except Exception as exc:
+            raise VectorStoreError("Qdrant file deletion failed.") from exc
+
+    async def delete_scope(self, scope_id: str) -> None:
+        self._validate_scope_id(scope_id)
+        try:
+            await self._client.delete(collection_name=self._collection_name, points_selector=models.FilterSelector(filter=models.Filter(must=[models.FieldCondition(key="retrieval_scope_id", match=models.MatchValue(value=scope_id))])))
+        except Exception as exc:
+            raise VectorStoreError("Qdrant retrieval scope deletion failed.") from exc
 
     @staticmethod
     def _collection_dimensions(collection: object) -> int:
@@ -296,6 +332,7 @@ class QdrantVectorStore:
                 final_url=payload["final_url"],
                 title=payload.get("title"),
                 index=payload["chunk_index"],
+                source_type=payload.get("source_type", "web"), conversation_id=payload.get("conversation_id"), document_id=payload.get("document_id"), filename=payload.get("filename"), page_number=payload.get("page_number"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise VectorStoreError("Qdrant similarity search response was invalid.") from exc

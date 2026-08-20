@@ -35,11 +35,11 @@ export function parseSseEvent(frame: string): RagStreamEvent | null {
   throw new SseParseError(`${eventName} SSE event had an invalid shape.`)
 }
 
-export interface StreamAnswerOptions { signal?: AbortSignal; onEvent: (event: RagStreamEvent) => void; fetchImpl?: typeof fetch; history?: ConversationHistoryTurn[] }
+export interface StreamAnswerOptions { signal?: AbortSignal; onEvent: (event: RagStreamEvent) => void; fetchImpl?: typeof fetch; history?: ConversationHistoryTurn[]; sourceMode?: 'web' | 'files' | 'hybrid'; conversationId?: string; documentIds?: string[] }
 
 export async function streamAnswer(query: string, options: StreamAnswerOptions): Promise<void> {
   const response = await (options.fetchImpl ?? fetch)(apiUrl('/api/v1/answer/stream'), {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ query, ...(options.history?.length ? { history: options.history } : {}) }), signal: options.signal,
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ query, ...(options.history?.length ? { history: options.history } : {}), source_mode: options.sourceMode ?? 'web', ...(options.sourceMode !== 'web' ? { conversation_id: options.conversationId, document_ids: options.documentIds } : {}) }), signal: options.signal,
   })
   if (!response.ok) throw new ApiClientError(`Answer stream failed with status ${response.status}.`, response.status)
   if (!response.body) throw new ApiClientError('Answer stream did not include a response body.')

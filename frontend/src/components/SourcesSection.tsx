@@ -17,12 +17,13 @@ export function SourcesSection({ sources }: SourcesSectionProps) {
 }
 
 function SourceCard({ source, referenceNumber }: { source: CitationSource; referenceNumber: number }) {
+  const isFile = source.source_type === 'file'
+  const fileLabel = source.filename || 'Document'
   return (
     <article id={`source-${referenceNumber}`} className="source-card" tabIndex={-1}>
       <span className="source-number">{referenceNumber}</span>
       <div>
-        <a href={source.url} target="_blank" rel="noreferrer">{source.title || hostname(source.url)}</a>
-        <p>{hostname(source.url)}</p>
+        {isFile ? <><strong>{fileLabel}</strong>{source.page_number ? <p>Page {source.page_number}</p> : null}</> : <><a href={source.url} target="_blank" rel="noreferrer">{source.title || hostname(source.url)}</a><p>{hostname(source.url)}</p></>}
       </div>
     </article>
   )

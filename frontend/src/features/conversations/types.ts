@@ -17,7 +17,9 @@ export interface Conversation {
   createdAt: string
   updatedAt: string
   messages: ConversationMessage[]
+  documents: ConversationDocument[]
 }
+export interface ConversationDocument { id: string; filename: string; mediaType: string; pageCount: number | null; chunkCount: number; createdAt: string; status: 'uploading' | 'ready' | 'error'; error?: string }
 
 export function conversationTitle(query: string): string {
   const normalized = query.trim().replace(/\s+/g, ' ')

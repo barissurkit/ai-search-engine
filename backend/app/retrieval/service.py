@@ -115,6 +115,36 @@ class RetrievalService:
             raise RetrievalServiceError("Semantic retrieval search failed.") from exc
         return self._source_diversifier.diversify(candidates, top_k=limit)
 
+    async def delete_files(self, conversation_id: str, document_id: str | None = None) -> None:
+        await self._ensure_collection()
+        try:
+            await self._vector_store.delete_files(conversation_id, document_id)
+        except Exception as exc:
+            raise RetrievalServiceError("Document cleanup failed.") from exc
+
+    async def delete_scope(self, scope_id: str) -> None:
+        await self._ensure_collection()
+        try:
+            await self._vector_store.delete_scope(scope_id)
+        except Exception as exc:
+            raise RetrievalServiceError("Web retrieval cleanup failed.") from exc
+
+    async def retrieve_file_chunks(self, query: str, conversation_id: str, document_ids: list[str], top_k: int | None = None) -> list[ScoredDocumentChunk]:
+        if not query.strip() or not conversation_id.strip() or not document_ids:
+            raise RetrievalServiceError("File retrieval requires a query, conversation, and selected documents.")
+        limit = self._default_top_k if top_k is None else top_k
+        await self._ensure_collection()
+        try:
+            if self._vector_store.uses_cloud_inference:
+                candidates = await self._vector_store.search_files_with_inference(query, limit * self._candidate_multiplier, conversation_id, document_ids)
+            else:
+                vector = await self._embedding_provider.embed(query)
+                self._validate_vector(vector)
+                candidates = await self._vector_store.search_files(vector, limit * self._candidate_multiplier, conversation_id, document_ids)
+        except Exception as exc:
+            raise RetrievalServiceError("File retrieval search failed.") from exc
+        return self._source_diversifier.diversify(candidates, top_k=limit)
+
     async def _ensure_collection(self) -> None:
         if self._collection_initialized:
             return
