@@ -59,6 +59,25 @@ class FakeQdrantClient:
         self.delete_calls.append(kwargs)
 
 
+class FilterApplyingQdrantClient(FakeQdrantClient):
+    def __init__(self, payloads: list[dict[str, object]]) -> None:
+        super().__init__()
+        self.payloads = payloads
+
+    async def delete(self, **kwargs: object) -> None:
+        await super().delete(**kwargs)
+        conditions = kwargs["points_selector"].filter.must
+
+        def matches(payload: dict[str, object]) -> bool:
+            return all(
+                payload.get(condition.key)
+                == getattr(condition.match, "value", object())
+                for condition in conditions
+            )
+
+        self.payloads = [payload for payload in self.payloads if not matches(payload)]
+
+
 def collection_with_dimensions(dimensions: int) -> object:
     return SimpleNamespace(
         config=SimpleNamespace(params=SimpleNamespace(vectors=SimpleNamespace(size=dimensions)))
@@ -95,11 +114,19 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     config = client.create_calls[0]["vectors_config"]
     assert config.size == 3
     assert config.distance.value == "Cosine"
-    assert client.payload_index_calls == [{
-        "collection_name": "test_chunks",
-        "field_name": "retrieval_scope_id",
-        "field_schema": qdrant_module.models.PayloadSchemaType.KEYWORD,
-    }]
+    assert client.payload_index_calls == [
+        {
+            "collection_name": "test_chunks",
+            "field_name": field_name,
+            "field_schema": qdrant_module.models.PayloadSchemaType.KEYWORD,
+        }
+        for field_name in (
+            "retrieval_scope_id",
+            "source_type",
+            "conversation_id",
+            "document_id",
+        )
+    ]
 
 
 def test_initialize_is_safe_when_called_concurrently():
@@ -112,7 +139,7 @@ def test_initialize_is_safe_when_called_concurrently():
     asyncio.run(initialize_twice())
 
     assert len(client.create_calls) == 1
-    assert len(client.payload_index_calls) == 1
+    assert len(client.payload_index_calls) == 4
 
 
 def test_initialize_failure_releases_lock_for_a_later_retry():
@@ -134,7 +161,34 @@ def test_initialize_failure_releases_lock_for_a_later_retry():
 
     assert attempts == 2
     assert len(client.create_calls) == 1
-    assert len(client.payload_index_calls) == 1
+    assert len(client.payload_index_calls) == 4
+
+
+def test_initialize_retries_all_payload_indexes_after_an_index_creation_failure():
+    client = FakeQdrantClient()
+    store = create_store(client)
+    original_create_payload_index = client.create_payload_index
+    attempts = 0
+
+    async def fail_once(**kwargs: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 2:
+            raise RuntimeError("temporary payload index failure")
+        await original_create_payload_index(**kwargs)
+
+    client.create_payload_index = fail_once
+    with pytest.raises(VectorStoreError, match="initialization failed"):
+        asyncio.run(store.initialize_collection())
+    asyncio.run(store.initialize_collection())
+
+    assert [call["field_name"] for call in client.payload_index_calls] == [
+        "retrieval_scope_id",
+        "retrieval_scope_id",
+        "source_type",
+        "conversation_id",
+        "document_id",
+    ]
 
 
 def test_cloud_inference_file_lifecycle_uses_a_scoped_filter_and_is_retry_safe():
@@ -240,6 +294,12 @@ def test_initialize_keeps_an_existing_compatible_collection():
     asyncio.run(create_store(client).initialize_collection())
 
     assert client.create_calls == []
+    assert [call["field_name"] for call in client.payload_index_calls] == [
+        "retrieval_scope_id",
+        "source_type",
+        "conversation_id",
+        "document_id",
+    ]
 
 
 def test_initialize_rejects_an_existing_incompatible_collection():
@@ -382,6 +442,9 @@ def test_file_search_builds_conversation_document_and_file_type_filter():
     assert [(condition.key, getattr(condition.match, "value", None)) for condition in conditions[:2]] == [("source_type", "file"), ("conversation_id", "conversation-b")]
     assert conditions[2].key == "document_id"
     assert conditions[2].match.any == ["document-b"]
+    assert {condition.key for condition in conditions} <= set(
+        QdrantVectorStore._FILTER_PAYLOAD_FIELDS
+    )
 
 
 def test_file_search_rejects_empty_selected_documents():
@@ -397,9 +460,56 @@ def test_file_search_maps_file_metadata_without_fake_page_numbers():
 
 
 def test_file_deletion_filters_are_scoped_to_file_conversation_and_document():
-    client = FakeQdrantClient(); store = create_store(client)
+    client = FakeQdrantClient()
+    store = create_store(client)
     asyncio.run(store.delete_files("conversation-a", "document-a"))
     conditions = client.delete_calls[0]["points_selector"].filter.must
-    assert [(item.key, item.match.value) for item in conditions] == [("source_type", "file"), ("conversation_id", "conversation-a"), ("document_id", "document-a")]
+    assert [(item.key, item.match.value) for item in conditions] == [
+        ("source_type", "file"),
+        ("conversation_id", "conversation-a"),
+        ("document_id", "document-a"),
+    ]
     asyncio.run(store.delete_files("conversation-a"))
     assert len(client.delete_calls[1]["points_selector"].filter.must) == 2
+
+
+def test_file_deletion_is_scoped_and_idempotent_for_individual_and_conversation_cleanup():
+    client = FilterApplyingQdrantClient(
+        [
+            {"source_type": "file", "conversation_id": "conversation-a", "document_id": "document-a"},
+            {"source_type": "file", "conversation_id": "conversation-a", "document_id": "document-b"},
+            {"source_type": "file", "conversation_id": "conversation-b", "document_id": "document-c"},
+            {"source_type": "web", "retrieval_scope_id": "web-scope"},
+        ]
+    )
+    store = create_store(client)
+
+    asyncio.run(store.delete_files("conversation-a", "document-a"))
+    asyncio.run(store.delete_files("conversation-a", "document-a"))
+    assert client.payloads == [
+        {"source_type": "file", "conversation_id": "conversation-a", "document_id": "document-b"},
+        {"source_type": "file", "conversation_id": "conversation-b", "document_id": "document-c"},
+        {"source_type": "web", "retrieval_scope_id": "web-scope"},
+    ]
+
+    asyncio.run(store.delete_files("conversation-a"))
+    asyncio.run(store.delete_files("conversation-a"))
+    assert client.payloads == [
+        {"source_type": "file", "conversation_id": "conversation-b", "document_id": "document-c"},
+        {"source_type": "web", "retrieval_scope_id": "web-scope"},
+    ]
+
+
+def test_web_scope_cleanup_remains_separate_from_persistent_file_ownership():
+    client = FilterApplyingQdrantClient(
+        [
+            {"source_type": "file", "conversation_id": "conversation-a", "document_id": "document-a"},
+            {"source_type": "web", "retrieval_scope_id": "web-scope"},
+        ]
+    )
+
+    asyncio.run(create_store(client).delete_scope("web-scope"))
+
+    assert client.payloads == [
+        {"source_type": "file", "conversation_id": "conversation-a", "document_id": "document-a"}
+    ]
