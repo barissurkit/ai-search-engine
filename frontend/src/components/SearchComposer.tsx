@@ -25,7 +25,9 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
     const textarea = textareaRef.current
     if (!textarea) return
     textarea.style.height = 'auto'
-    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 44), maxTextareaHeight)}px`
+    const height = Math.min(Math.max(textarea.scrollHeight, 40), maxTextareaHeight)
+    textarea.style.height = `${height}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxTextareaHeight ? 'auto' : 'hidden'
   }, [query])
 
   const submit = () => {
@@ -37,7 +39,12 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
 
   return (
     <form className="search-composer" onSubmit={(event) => { event.preventDefault(); submit() }}>
-      {onModeChange && <div className="source-modes" aria-label="Source mode">{([['web', 'Web'], ['files', 'Files'], ['hybrid', 'Web + Files']] as const).map(([value, label]) => <button key={value} type="button" className={mode === value ? 'selected' : ''} disabled={value !== 'web' && !ready} onClick={() => onModeChange(value)}>{label}</button>)}</div>}
+      {onModeChange && <div className="source-modes" aria-label="Source mode">{([['web', 'Web'], ['files', 'Files'], ['hybrid', 'Web + Files']] as const).map(([value, label]) => {
+        const unavailable = value !== 'web' && !ready
+        return <span className={`source-mode-option ${unavailable ? 'unavailable' : ''}`} key={value} title={unavailable ? 'Attach a file to use Files mode' : undefined}>
+          <button type="button" className={mode === value ? 'selected' : ''} disabled={unavailable} onClick={() => onModeChange(value)}>{label}</button>
+        </span>
+      })}</div>}
       {documents.map((document) => <span className={`document-chip ${document.status}`} key={document.id}>{document.filename}<small>{document.status === 'uploading' ? 'Uploading…' : document.status === 'ready' ? 'Ready' : 'Upload failed'}</small><button type="button" aria-label={`Remove ${document.filename}`} disabled={removingDocumentId === document.id} onClick={() => onRemoveDocument?.(document.id)}>×</button></span>)}
       <label className="sr-only" htmlFor="search-query">Search the web</label>
       <textarea
