@@ -18,7 +18,7 @@ class UploadedDocument(BaseModel):
     conversation_id: str
     filename: str
     media_type: str
-    page_count: int
+    page_count: int | None
     chunk_count: int
     status: str = "ready"
 
@@ -43,9 +43,15 @@ async def upload_document(conversation_id: Annotated[str, Form()], file: Annotat
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(document_id: str, conversation_id: str, service: Annotated[RAGService, Depends(get_rag_service)]) -> None:
-    await service.delete_file(conversation_id, document_id)
+    try:
+        await service.delete_file(conversation_id, document_id)
+    except RAGServiceError as exc:
+        raise HTTPException(status_code=502, detail="Document cleanup failed.") from exc
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_conversation_documents(conversation_id: str, service: Annotated[RAGService, Depends(get_rag_service)]) -> None:
-    await service.delete_file(conversation_id)
+    try:
+        await service.delete_file(conversation_id)
+    except RAGServiceError as exc:
+        raise HTTPException(status_code=502, detail="Document cleanup failed.") from exc

@@ -20,7 +20,7 @@ from app.rag.models import (
 )
 from app.rag.prompt import RAGPromptBuilder
 from app.rag.timing import PipelineTimings
-from app.retrieval.service import RetrievalService
+from app.retrieval.service import RetrievalService, RetrievalServiceError
 from app.search.models import ConversationTurn
 from app.search.service import SearchService
 from app.web.ingestion import WebIngestionService
@@ -83,14 +83,23 @@ class RAGService:
 
     async def index_file(self, document_id: str, conversation_id: str, filename: str, pages: list[tuple[int | None, str]]) -> int:
         chunks = []
-        for page_number, content in pages:
-            document = Document(content=content, source_url=f"file://{document_id}", final_url=f"file://{document_id}", title=filename)
-            chunks.extend(chunk.model_copy(update={"source_type": "file", "conversation_id": conversation_id, "document_id": document_id, "filename": filename, "page_number": page_number}) for chunk in self._chunker.chunk(document))
-        await self._retrieval_service.index(chunks, scope_id=f"file:{conversation_id}:{document_id}")
+        try:
+            for page_number, content in pages:
+                document = Document(content=content, source_url=f"file://{document_id}", final_url=f"file://{document_id}", title=filename)
+                chunks.extend(chunk.model_copy(update={"source_type": "file", "conversation_id": conversation_id, "document_id": document_id, "filename": filename, "page_number": page_number}) for chunk in self._chunker.chunk(document))
+        except Exception as exc:
+            raise RAGServiceError("Document could not be indexed.") from exc
+        try:
+            await self._retrieval_service.index(chunks, scope_id=f"file:{conversation_id}:{document_id}")
+        except RetrievalServiceError as exc:
+            raise RAGServiceError("Document could not be indexed.") from exc
         return len(chunks)
 
     async def delete_file(self, conversation_id: str, document_id: str | None = None) -> None:
-        await self._retrieval_service.delete_files(conversation_id, document_id)
+        try:
+            await self._retrieval_service.delete_files(conversation_id, document_id)
+        except RetrievalServiceError as exc:
+            raise RAGServiceError("Document cleanup failed.") from exc
 
     @property
     def supports_streaming(self) -> bool:
