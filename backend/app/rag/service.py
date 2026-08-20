@@ -20,6 +20,7 @@ from app.retrieval.service import RetrievalService
 from app.search.models import ConversationTurn
 from app.search.service import SearchService
 from app.web.ingestion import WebIngestionService
+from app.web.models import Document
 
 
 class RAGServiceError(Exception):
@@ -57,6 +58,17 @@ class RAGService:
             answer=generated_answer,
             sources=prompt.sources,
         )
+
+    async def index_file(self, document_id: str, conversation_id: str, filename: str, pages: list[tuple[int | None, str]]) -> int:
+        chunks = []
+        for page_number, content in pages:
+            document = Document(content=content, source_url=f"file://{document_id}", final_url=f"file://{document_id}", title=filename)
+            chunks.extend(chunk.model_copy(update={"source_type": "file", "conversation_id": conversation_id, "document_id": document_id, "filename": filename, "page_number": page_number}) for chunk in self._chunker.chunk(document))
+        await self._retrieval_service.index(chunks, scope_id=f"file:{conversation_id}:{document_id}")
+        return len(chunks)
+
+    async def delete_file(self, conversation_id: str, document_id: str | None = None) -> None:
+        await self._retrieval_service.delete_files(conversation_id, document_id)
 
     @property
     def supports_streaming(self) -> bool:

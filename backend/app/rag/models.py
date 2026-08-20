@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 
 class DocumentChunk(BaseModel):
@@ -11,6 +11,11 @@ class DocumentChunk(BaseModel):
     final_url: str
     index: int
     title: str | None = None
+    source_type: Literal["file"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    conversation_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    document_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    filename: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    page_number: int | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CitationSource(BaseModel):
@@ -19,6 +24,10 @@ class CitationSource(BaseModel):
     citation_number: int
     url: str
     title: str | None = None
+    source_type: Literal["file"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    document_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    filename: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    page_number: int | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class RAGAnswer(BaseModel):
