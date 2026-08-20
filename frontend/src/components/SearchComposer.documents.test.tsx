@@ -24,4 +24,13 @@ describe('SearchComposer documents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove report.pdf' }))
     expect(remove).toHaveBeenCalledWith('ready-a')
   })
+
+  it('keeps attachment chips separate from the stable toolbar', () => {
+    const longName = 'template düzenlerken komple.txt'
+    render(<SearchComposer query="" onQueryChange={() => undefined} onSubmit={() => undefined} onModeChange={() => undefined} documents={[{ ...ready, filename: longName }]} />)
+    const chip = screen.getByText(longName)
+    expect(chip).toHaveAttribute('title', longName)
+    expect(chip.closest('.attachment-chips')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Web' }).closest('.composer-toolbar')).not.toBeNull()
+  })
 })

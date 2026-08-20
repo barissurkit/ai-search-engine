@@ -39,13 +39,6 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
 
   return (
     <form className="search-composer" onSubmit={(event) => { event.preventDefault(); submit() }}>
-      {onModeChange && <div className="source-modes" aria-label="Source mode">{([['web', 'Web'], ['files', 'Files'], ['hybrid', 'Web + Files']] as const).map(([value, label]) => {
-        const unavailable = value !== 'web' && !ready
-        return <span className={`source-mode-option ${unavailable ? 'unavailable' : ''}`} key={value} title={unavailable ? 'Attach a file to use Files mode' : undefined}>
-          <button type="button" className={mode === value ? 'selected' : ''} disabled={unavailable} onClick={() => onModeChange(value)}>{label}</button>
-        </span>
-      })}</div>}
-      {documents.map((document) => <span className={`document-chip ${document.status}`} key={document.id}>{document.filename}<small>{document.status === 'uploading' ? 'Uploading…' : document.status === 'ready' ? 'Ready' : 'Upload failed'}</small><button type="button" aria-label={`Remove ${document.filename}`} disabled={removingDocumentId === document.id} onClick={() => onRemoveDocument?.(document.id)}>×</button></span>)}
       <label className="sr-only" htmlFor="search-query">Search the web</label>
       <textarea
         ref={textareaRef}
@@ -64,10 +57,21 @@ export function SearchComposer({ query, onQueryChange, onSubmit, disabled = fals
         disabled={disabled}
         autoFocus={autoFocus}
       />
-      {onAttach && <label className="attachment-button" aria-label="Attach file">+<input type="file" accept=".pdf,.txt,.md,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAttach(file); event.currentTarget.value = '' }} /></label>}
-      <button type="submit" aria-label="Submit search" disabled={disabled || !query.trim()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-      </button>
+      {documents.length > 0 && <div className="attachment-chips" aria-label="Attachments">{documents.map((document) => <span className={`document-chip ${document.status}`} key={document.id}><span className="document-chip-name" title={document.filename}>{document.filename}</span><small>{document.status === 'uploading' ? 'Uploading…' : document.status === 'ready' ? 'Ready' : 'Upload failed'}</small><button type="button" aria-label={`Remove ${document.filename}`} disabled={removingDocumentId === document.id} onClick={() => onRemoveDocument?.(document.id)}>×</button></span>)}</div>}
+      <div className="composer-toolbar">
+        {onModeChange && <div className="source-modes" aria-label="Source mode">{([['web', 'Web'], ['files', 'Files'], ['hybrid', 'Web + Files']] as const).map(([value, label]) => {
+          const unavailable = value !== 'web' && !ready
+          return <span className={`source-mode-option ${unavailable ? 'unavailable' : ''}`} key={value} title={unavailable ? 'Attach a file to use Files mode' : undefined}>
+            <button type="button" className={mode === value ? 'selected' : ''} disabled={unavailable} onClick={() => onModeChange(value)}>{label}</button>
+          </span>
+        })}</div>}
+        <div className="composer-actions">
+          {onAttach && <label className="attachment-button" aria-label="Attach file">+<input type="file" accept=".pdf,.txt,.md,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) onAttach(file); event.currentTarget.value = '' }} /></label>}
+          <button type="submit" aria-label="Submit search" disabled={disabled || !query.trim()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+          </button>
+        </div>
+      </div>
     </form>
   )
 }
