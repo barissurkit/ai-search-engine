@@ -67,3 +67,46 @@ def test_cors_does_not_allow_unconfigured_origin(monkeypatch):
 
     assert response.status_code == 400
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_allows_production_origin_document_delete_preflight(monkeypatch):
+    origin = "https://ai-search-engine-wine-three.vercel.app"
+    app = app_with_origins(monkeypatch, origin)
+
+    response = asyncio.run(
+        request(
+            app,
+            "OPTIONS",
+            "/api/v1/documents?conversation_id=conversation",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "DELETE",
+            },
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "DELETE" in response.headers["access-control-allow-methods"]
+
+
+def test_cors_preserves_production_origin_upload_preflight(monkeypatch):
+    origin = "https://ai-search-engine-wine-three.vercel.app"
+    app = app_with_origins(monkeypatch, origin)
+
+    response = asyncio.run(
+        request(
+            app,
+            "OPTIONS",
+            "/api/v1/documents",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "POST" in response.headers["access-control-allow-methods"]
