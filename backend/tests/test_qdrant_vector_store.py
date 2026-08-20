@@ -101,6 +101,41 @@ def test_initialize_creates_cosine_collection_with_given_dimension():
     }]
 
 
+def test_initialize_is_safe_when_called_concurrently():
+    client = FakeQdrantClient()
+    store = create_store(client)
+
+    async def initialize_twice() -> None:
+        await asyncio.gather(store.initialize_collection(), store.initialize_collection())
+
+    asyncio.run(initialize_twice())
+
+    assert len(client.create_calls) == 1
+    assert len(client.payload_index_calls) == 1
+
+
+def test_initialize_failure_releases_lock_for_a_later_retry():
+    client = FakeQdrantClient()
+    store = create_store(client)
+    attempts = 0
+
+    async def fail_once(_collection_name: str) -> bool:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary failure")
+        return False
+
+    client.collection_exists = fail_once
+    with pytest.raises(VectorStoreError, match="initialization failed"):
+        asyncio.run(store.initialize_collection())
+    asyncio.run(store.initialize_collection())
+
+    assert attempts == 2
+    assert len(client.create_calls) == 1
+    assert len(client.payload_index_calls) == 1
+
+
 def test_client_composition_preserves_local_url_without_an_api_key(monkeypatch):
     calls: list[dict[str, object]] = []
 

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid5
 
@@ -70,6 +71,8 @@ class QdrantVectorStore:
         self._uses_cloud_inference = settings.qdrant_cloud_inference_enabled
         self._inference_model = settings.qdrant_inference_model
         self._client = client or self._create_client(settings)
+        self._initialization_lock = asyncio.Lock()
+        self._collection_initialized = False
 
     @staticmethod
     def _create_client(settings: Settings) -> AsyncQdrantClient:
@@ -90,6 +93,13 @@ class QdrantVectorStore:
         return self._uses_cloud_inference
 
     async def initialize_collection(self) -> None:
+        async with self._initialization_lock:
+            if self._collection_initialized:
+                return
+            await self._initialize_collection()
+            self._collection_initialized = True
+
+    async def _initialize_collection(self) -> None:
         try:
             collection_exists = await self._client.collection_exists(
                 self._collection_name
