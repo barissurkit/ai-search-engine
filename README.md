@@ -93,6 +93,66 @@ npm run dev
 
 See [local setup](docs/setup.md) for configuration and validation commands.
 
+## Gereksinimler
+
+- Python 3.12 veya üzeri (`backend/pyproject.toml`: `requires-python = ">=3.12"`) ve [uv](https://docs.astral.sh/uv/)
+- Node.js ve npm (doğrulama Node.js 24 ile yapıldı)
+- Docker Compose (yerel Qdrant için), Ollama (yerel model çalıştırmak için) ve bir [Tavily](https://tavily.com) API anahtarı
+
+## Kurulum
+
+```sh
+git clone https://github.com/barissurkit/ai-search-engine.git
+cd ai-search-engine
+
+cd backend
+uv sync
+cp .env.example .env   # backend/.env içinde TAVILY_API_KEY değerini doldurun
+
+cd ../frontend
+npm ci
+```
+
+Yerel Qdrant ve model kurulumu için [local setup](docs/setup.md) belgesine bakın.
+
+## Kullanım
+
+Qdrant'ı ve backend'i başlatın (repository kökünden):
+
+```sh
+docker compose up -d
+cd backend
+uv run uvicorn app.main:app --reload
+```
+
+Backend çalıştığında sağlık kontrolü şu yanıtı verir:
+
+```sh
+curl http://localhost:8000/health
+```
+
+```json
+{"status":"ok"}
+```
+
+Ardından başka bir terminalde arayüzü başlatın:
+
+```sh
+cd frontend
+npm run dev
+```
+
+Vite'ın yazdığı adresi açın, bir soru sorun; yanıt akış halinde gelir ve her yanıtın kaynakları Sources panelinde incelenebilir. Etkileşimli API belgeleri `http://localhost:8000/docs` adresindedir.
+
+## Testler
+
+```sh
+cd backend && uv run pytest && uv run ruff check .
+cd ../frontend && npm run lint && npm run test:run
+```
+
+Katkı rehberi için [CONTRIBUTING.md](CONTRIBUTING.md) dosyasına bakın.
+
 ## Evaluation
 
 The deterministic offline quality gate records **29/29 PASS**. Selected-file retrieval reports Hit@1/3/5, Recall@1/3/5, and MRR of **1.00** in its fixtures. Citation presence (0.89), validity (0.78), and coverage (0.56) deliberately include invalid, absent, and partial-citation fixtures, so they are structural regression measures—not factual-correctness scores. [Evaluation details](docs/evaluation.md)
